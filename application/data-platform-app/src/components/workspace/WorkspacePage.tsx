@@ -95,7 +95,7 @@ function WorkspacePage({ databaseName, databasePath, onClose }: WorkspacePagePro
       setDashboard(result);
       setOutput({
         title: "Refresh",
-        message: "Dashboard refreshed from real Data Engine state.",
+        message: "Dashboard refreshed successfully.",
         rows: []
       });
     } catch (error) {
