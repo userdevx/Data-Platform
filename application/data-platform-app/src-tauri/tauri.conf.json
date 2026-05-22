@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Data Platform",
+  "version": "0.1.0",
+  "identifier": "com.device.data-platform-app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Data Platform",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Nigel Lawrence",
+    "category": "DeveloperTool",
+    "shortDescription": "Data Platform Application Interface",
+    "longDescription": "A cross-platform Application Interface for monitoring ingestion, records, queries, validation, reports, health metrics, and engine activity.",
+    "copyright": "Copyright © 2026 CCS Technologies",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "displayLanguageSelector": true
+      },
+      "wix": {
+        "language": "en-US"
+      }
+    },
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  }
+}
