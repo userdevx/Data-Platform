@@ -1,0 +1,5 @@
+{
+  "data_file": "data/records.json",
+  "default_backend": "local_json",
+  "log_file": "logs/engine.log"
+}
