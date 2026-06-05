@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 type WorkspacePageProps = {
   databaseName: string;
   databasePath: string;
+  onOpenAgent: () => void;
   onClose: () => void;
 };
 
@@ -52,7 +53,15 @@ function getColumns(rows: Record<string, string>[]) {
   const firstRow = rows[0];
 
   if ("log_id" in firstRow) {
-    return ["log_id", "log_file", "timestamp", "level", "action", "message", "source"];
+    return [
+      "log_id",
+      "log_file",
+      "timestamp",
+      "level",
+      "action",
+      "message",
+      "source"
+    ];
   }
 
   if ("export_file" in firstRow) {
@@ -62,7 +71,12 @@ function getColumns(rows: Record<string, string>[]) {
   return Object.keys(firstRow);
 }
 
-function WorkspacePage({ databaseName, databasePath, onClose }: WorkspacePageProps) {
+function WorkspacePage({
+  databaseName,
+  databasePath,
+  onOpenAgent,
+  onClose
+}: WorkspacePageProps) {
   const [activeSection, setActiveSection] = useState("Dashboard");
 
   const [dashboard, setDashboard] = useState<WorkspaceDashboard>({
@@ -95,7 +109,7 @@ function WorkspacePage({ databaseName, databasePath, onClose }: WorkspacePagePro
       setDashboard(result);
       setOutput({
         title: "Refresh",
-        message: "Dashboard refreshed successfully.",
+        message: "Dashboard refreshed from real Data Engine state.",
         rows: []
       });
     } catch (error) {
@@ -178,6 +192,14 @@ function WorkspacePage({ databaseName, databasePath, onClose }: WorkspacePagePro
             <button
               type="button"
               className="secondary-button"
+              onClick={onOpenAgent}
+            >
+              Agent
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
               onClick={() => void refreshDashboard()}
             >
               Refresh
@@ -250,7 +272,13 @@ function WorkspacePage({ databaseName, databasePath, onClose }: WorkspacePagePro
                 <tr>
                   <td>{dashboard.recent_ingestion_source}</td>
                   <td>{dashboard.raw_records}</td>
-                  <td className={dashboard.recent_ingestion_status === "Success" ? "success-text" : ""}>
+                  <td
+                    className={
+                      dashboard.recent_ingestion_status === "Success"
+                        ? "success-text"
+                        : ""
+                    }
+                  >
                     {dashboard.recent_ingestion_status}
                   </td>
                 </tr>
@@ -271,21 +299,39 @@ function WorkspacePage({ databaseName, databasePath, onClose }: WorkspacePagePro
 
             <div className="pipeline-row">
               <span>Raw → Bronze</span>
-              <strong className={dashboard.pipeline_raw_to_bronze === "Success" ? "success-text" : ""}>
+              <strong
+                className={
+                  dashboard.pipeline_raw_to_bronze === "Success"
+                    ? "success-text"
+                    : ""
+                }
+              >
                 {dashboard.pipeline_raw_to_bronze}
               </strong>
             </div>
 
             <div className="pipeline-row">
               <span>Bronze → Silver</span>
-              <strong className={dashboard.pipeline_bronze_to_silver === "Success" ? "success-text" : ""}>
+              <strong
+                className={
+                  dashboard.pipeline_bronze_to_silver === "Success"
+                    ? "success-text"
+                    : ""
+                }
+              >
                 {dashboard.pipeline_bronze_to_silver}
               </strong>
             </div>
 
             <div className="pipeline-row">
               <span>Silver → Gold</span>
-              <strong className={dashboard.pipeline_silver_to_gold === "Success" ? "success-text" : ""}>
+              <strong
+                className={
+                  dashboard.pipeline_silver_to_gold === "Success"
+                    ? "success-text"
+                    : ""
+                }
+              >
                 {dashboard.pipeline_silver_to_gold}
               </strong>
             </div>

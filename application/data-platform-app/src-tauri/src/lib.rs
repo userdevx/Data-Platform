@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DATA_ENGINE_MAX_BYTES: u64 = 500 * 1024 * 1024;
@@ -63,7 +64,21 @@ struct WorkspaceOutput {
     rows: Vec<HashMap<String, String>>,
 }
 
-fn project_root() -> Result<PathBuf, String> {
+#[derive(Serialize)]
+struct AgentTaskResult {
+    success: bool,
+    message: String,
+    path: String,
+}
+
+fn timestamp() -> Result<u64, String> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs())
+}
+
+fn app_root() -> Result<PathBuf, String> {
     let current = std::env::current_dir()
         .map_err(|error| format!("Unable to read current directory: {}", error))?;
 
@@ -71,14 +86,34 @@ fn project_root() -> Result<PathBuf, String> {
         return current
             .parent()
             .map(|path| path.to_path_buf())
-            .ok_or("Unable to locate project root.".to_string());
+            .ok_or("Unable to locate application root.".to_string());
     }
 
     Ok(current)
 }
 
+fn find_data_platform_root() -> Result<PathBuf, String> {
+    let mut dir = std::env::current_dir()
+        .map_err(|error| format!("Unable to read current directory: {}", error))?;
+
+    loop {
+        let worker = dir.join("engine").join("agents").join("agent_worker.py");
+
+        if worker.exists() {
+            return Ok(dir);
+        }
+
+        if !dir.pop() {
+            return Err(
+                "Could not find Data-Platform project root. Expected engine/agents/agent_worker.py."
+                    .to_string(),
+            );
+        }
+    }
+}
+
 fn data_dir() -> Result<PathBuf, String> {
-    let path = project_root()?.join("data");
+    let path = app_root()?.join("data");
 
     for folder in [
         "",
@@ -97,6 +132,22 @@ fn data_dir() -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn logs_dir() -> Result<PathBuf, String> {
+    let path = app_root()?.join("logs");
+    fs::create_dir_all(&path).map_err(|error| format!("Unable to create logs folder: {}", error))?;
+    Ok(path)
+}
+
+fn agent_dir() -> Result<PathBuf, String> {
+    let root = find_data_platform_root()?;
+    let path = root.join("engine").join("agents");
+
+    fs::create_dir_all(&path)
+        .map_err(|error| format!("Unable to create agent folder: {}", error))?;
+
+    Ok(path)
+}
+
 fn sources_path() -> Result<PathBuf, String> {
     Ok(data_dir()?.join("sources.jsonl"))
 }
@@ -109,19 +160,6 @@ fn layer_path(layer: &str) -> Result<PathBuf, String> {
     Ok(data_dir()?.join("data_lake").join(layer).join("records.jsonl"))
 }
 
-fn logs_dir() -> Result<PathBuf, String> {
-    let path = project_root()?.join("logs");
-    fs::create_dir_all(&path).map_err(|error| format!("Unable to create logs folder: {}", error))?;
-    Ok(path)
-}
-
-fn timestamp() -> Result<u64, String> {
-    Ok(SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("Unable to get timestamp: {}", error))?
-        .as_secs())
-}
-
 fn path_to_string(path: Option<PathBuf>) -> Option<String> {
     path.map(|value| value.to_string_lossy().to_string())
 }
@@ -132,7 +170,7 @@ fn size_of(path: &Path) -> u64 {
     }
 
     if path.is_file() {
-        return path.metadata().map(|m| m.len()).unwrap_or(0);
+        return path.metadata().map(|metadata| metadata.len()).unwrap_or(0);
     }
 
     let mut total = 0;
@@ -181,7 +219,8 @@ fn line_count(path: &Path) -> usize {
 
 fn append_jsonl(path: &Path, value: serde_json::Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("Unable to create parent folder: {}", error))?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Unable to create parent folder: {}", error))?;
     }
 
     let mut file = OpenOptions::new()
@@ -190,7 +229,8 @@ fn append_jsonl(path: &Path, value: serde_json::Value) -> Result<(), String> {
         .open(path)
         .map_err(|error| format!("Unable to open JSONL file: {}", error))?;
 
-    writeln!(file, "{}", value).map_err(|error| format!("Unable to write JSONL record: {}", error))?;
+    writeln!(file, "{}", value)
+        .map_err(|error| format!("Unable to write JSONL record: {}", error))?;
 
     Ok(())
 }
@@ -205,7 +245,8 @@ fn log_event(message: &str) -> Result<(), String> {
         .open(path)
         .map_err(|error| format!("Unable to open engine log: {}", error))?;
 
-    writeln!(file, "{} {}", now, message).map_err(|error| format!("Unable to write engine log: {}", error))?;
+    writeln!(file, "{} {}", now, message)
+        .map_err(|error| format!("Unable to write engine log: {}", error))?;
 
     Ok(())
 }
@@ -250,12 +291,25 @@ fn unique_path(folder: &Path, file_name: &str) -> PathBuf {
 }
 
 fn safe_name(name: &str) -> String {
-    name.to_lowercase()
+    let cleaned = name
+        .to_lowercase()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .trim_matches('_')
-        .to_string()
+        .to_string();
+
+    if cleaned.is_empty() {
+        "database".to_string()
+    } else {
+        cleaned
+    }
 }
 
 fn connected_sources_count() -> Result<usize, String> {
@@ -264,6 +318,7 @@ fn connected_sources_count() -> Result<usize, String> {
     for line in read_lines(&sources_path()?) {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
             let stored_path = value["metadata"]["stored_path"].as_str().unwrap_or("");
+
             if !stored_path.is_empty() {
                 unique.insert(stored_path.to_string());
             }
@@ -287,7 +342,10 @@ fn data_quality() -> Result<String, String> {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
             let required = ["source", "category", "sensor_type", "value", "unit", "timestamp"];
 
-            if required.iter().all(|key| value.get(*key).is_some() && !value[*key].is_null()) {
+            if required
+                .iter()
+                .all(|key| value.get(*key).is_some() && !value[*key].is_null())
+            {
                 valid += 1;
             }
         }
@@ -440,6 +498,7 @@ fn log_rows() -> Result<Vec<HashMap<String, String>>, String> {
 
 fn csv_escape(value: &str) -> String {
     let escaped = value.replace('"', "\"\"");
+
     if escaped.contains(',') || escaped.contains('"') || escaped.contains('\n') {
         format!("\"{}\"", escaped)
     } else {
@@ -452,23 +511,43 @@ fn get_user_locations() -> Vec<UserLocation> {
     let mut locations = Vec::new();
 
     if let Some(path) = path_to_string(dirs::home_dir()) {
-        locations.push(UserLocation { id: "home".to_string(), label: "Home".to_string(), path });
+        locations.push(UserLocation {
+            id: "home".to_string(),
+            label: "Home".to_string(),
+            path,
+        });
     }
 
     if let Some(path) = path_to_string(dirs::document_dir()) {
-        locations.push(UserLocation { id: "documents".to_string(), label: "Documents".to_string(), path });
+        locations.push(UserLocation {
+            id: "documents".to_string(),
+            label: "Documents".to_string(),
+            path,
+        });
     }
 
     if let Some(path) = path_to_string(dirs::download_dir()) {
-        locations.push(UserLocation { id: "downloads".to_string(), label: "Downloads".to_string(), path });
+        locations.push(UserLocation {
+            id: "downloads".to_string(),
+            label: "Downloads".to_string(),
+            path,
+        });
     }
 
     if let Some(path) = path_to_string(dirs::picture_dir()) {
-        locations.push(UserLocation { id: "pictures".to_string(), label: "Pictures".to_string(), path });
+        locations.push(UserLocation {
+            id: "pictures".to_string(),
+            label: "Pictures".to_string(),
+            path,
+        });
     }
 
     if let Some(path) = path_to_string(dirs::video_dir()) {
-        locations.push(UserLocation { id: "videos".to_string(), label: "Videos".to_string(), path });
+        locations.push(UserLocation {
+            id: "videos".to_string(),
+            label: "Videos".to_string(),
+            path,
+        });
     }
 
     if let Ok(path) = data_dir() {
@@ -508,8 +587,16 @@ fn read_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
         entries.push(DirectoryEntry {
             name: entry.file_name().to_string_lossy().to_string(),
             path: entry.path().to_string_lossy().to_string(),
-            entry_type: if metadata.is_dir() { "Folder".to_string() } else { "File".to_string() },
-            size: if metadata.is_file() { Some(metadata.len()) } else { None },
+            entry_type: if metadata.is_dir() {
+                "Folder".to_string()
+            } else {
+                "File".to_string()
+            },
+            size: if metadata.is_file() {
+                Some(metadata.len())
+            } else {
+                None
+            },
         });
     }
 
@@ -706,6 +793,7 @@ fn create_database(
 fn workspace_refresh(database_name: String, database_path: String) -> Result<WorkspaceDashboard, String> {
     let data = data_dir()?;
     let raw = line_count(&layer_path("raw")?);
+
     let databases = fs::read_dir(data.join("databases"))
         .map_err(|error| format!("Unable to read databases folder: {}", error))?
         .flatten()
@@ -723,7 +811,11 @@ fn workspace_refresh(database_name: String, database_path: String) -> Result<Wor
         databases,
         data_quality: data_quality()?,
         storage_used: format_bytes(size_of(&data)),
-        active_database: if database_name.is_empty() { database_path } else { database_name },
+        active_database: if database_name.is_empty() {
+            database_path
+        } else {
+            database_name
+        },
         recent_ingestion_source: recent_source,
         recent_ingestion_status: recent_status,
         pipeline_raw_to_bronze: raw_to_bronze,
@@ -755,10 +847,22 @@ fn workspace_action(
             for line in read_lines(&sources_path()?) {
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                     rows.push(row(vec![
-                        ("source_id", value["metadata"]["source_id"].as_str().unwrap_or("").to_string()),
-                        ("file_name", value["metadata"]["file_name"].as_str().unwrap_or("").to_string()),
-                        ("stored_path", value["metadata"]["stored_path"].as_str().unwrap_or("").to_string()),
-                        ("status", value["metadata"]["status"].as_str().unwrap_or("").to_string()),
+                        (
+                            "source_id",
+                            value["metadata"]["source_id"].as_str().unwrap_or("").to_string(),
+                        ),
+                        (
+                            "file_name",
+                            value["metadata"]["file_name"].as_str().unwrap_or("").to_string(),
+                        ),
+                        (
+                            "stored_path",
+                            value["metadata"]["stored_path"].as_str().unwrap_or("").to_string(),
+                        ),
+                        (
+                            "status",
+                            value["metadata"]["status"].as_str().unwrap_or("").to_string(),
+                        ),
                     ]));
                 }
             }
@@ -774,14 +878,28 @@ fn workspace_action(
             let data = data_dir()?;
             let mut rows = Vec::new();
 
-            for item in ["imports", "sources.jsonl", "records.jsonl", "databases", "data_lake", "exports"] {
+            for item in [
+                "imports",
+                "sources.jsonl",
+                "records.jsonl",
+                "databases",
+                "data_lake",
+                "exports",
+            ] {
                 let path = data.join(item);
 
                 rows.push(row(vec![
                     ("item", item.to_string()),
                     ("location", path.to_string_lossy().to_string()),
                     ("size", format_bytes(size_of(&path))),
-                    ("status", if path.exists() { "available".to_string() } else { "missing".to_string() }),
+                    (
+                        "status",
+                        if path.exists() {
+                            "available".to_string()
+                        } else {
+                            "missing".to_string()
+                        },
+                    ),
                 ]));
             }
 
@@ -803,7 +921,14 @@ fn workspace_action(
                     ("layer", layer.to_string()),
                     ("records", count.to_string()),
                     ("location", path.to_string_lossy().to_string()),
-                    ("status", if count > 0 { "active".to_string() } else { "waiting".to_string() }),
+                    (
+                        "status",
+                        if count > 0 {
+                            "active".to_string()
+                        } else {
+                            "waiting".to_string()
+                        },
+                    ),
                 ]));
             }
 
@@ -826,7 +951,14 @@ fn workspace_action(
                     ("layer", action),
                     ("records", count.to_string()),
                     ("location", path.to_string_lossy().to_string()),
-                    ("status", if count > 0 { "active".to_string() } else { "waiting".to_string() }),
+                    (
+                        "status",
+                        if count > 0 {
+                            "active".to_string()
+                        } else {
+                            "waiting".to_string()
+                        },
+                    ),
                 ])],
             })
         }
@@ -838,9 +970,18 @@ fn workspace_action(
                 title: "Pipelines".to_string(),
                 message: "Pipeline status loaded.".to_string(),
                 rows: vec![
-                    row(vec![("pipeline", "Raw → Bronze".to_string()), ("status", raw_to_bronze)]),
-                    row(vec![("pipeline", "Bronze → Silver".to_string()), ("status", bronze_to_silver)]),
-                    row(vec![("pipeline", "Silver → Gold".to_string()), ("status", silver_to_gold)]),
+                    row(vec![
+                        ("pipeline", "Raw → Bronze".to_string()),
+                        ("status", raw_to_bronze),
+                    ]),
+                    row(vec![
+                        ("pipeline", "Bronze → Silver".to_string()),
+                        ("status", bronze_to_silver),
+                    ]),
+                    row(vec![
+                        ("pipeline", "Silver → Gold".to_string()),
+                        ("status", silver_to_gold),
+                    ]),
                 ],
             })
         }
@@ -849,9 +990,18 @@ fn workspace_action(
             title: "Queries".to_string(),
             message: "Available query actions loaded.".to_string(),
             rows: vec![
-                row(vec![("query", "SELECT * FROM records LIMIT 100".to_string()), ("status", "ready".to_string())]),
-                row(vec![("query", "SELECT COUNT(*) FROM sources".to_string()), ("status", "ready".to_string())]),
-                row(vec![("query", "SELECT COUNT(*) FROM raw".to_string()), ("status", "ready".to_string())]),
+                row(vec![
+                    ("query", "SELECT * FROM records LIMIT 100".to_string()),
+                    ("status", "ready".to_string()),
+                ]),
+                row(vec![
+                    ("query", "SELECT COUNT(*) FROM sources".to_string()),
+                    ("status", "ready".to_string()),
+                ]),
+                row(vec![
+                    ("query", "SELECT COUNT(*) FROM raw".to_string()),
+                    ("status", "ready".to_string()),
+                ]),
             ],
         }),
 
@@ -906,9 +1056,21 @@ fn workspace_action(
                 title: "Pipeline Status".to_string(),
                 message: "Pipeline completed successfully.".to_string(),
                 rows: vec![
-                    row(vec![("stage", "Raw → Bronze".to_string()), ("records", line_count(&bronze_path).to_string()), ("status", "Success".to_string())]),
-                    row(vec![("stage", "Bronze → Silver".to_string()), ("records", line_count(&silver_path).to_string()), ("status", "Success".to_string())]),
-                    row(vec![("stage", "Silver → Gold".to_string()), ("records", line_count(&gold_path).to_string()), ("status", "Success".to_string())]),
+                    row(vec![
+                        ("stage", "Raw → Bronze".to_string()),
+                        ("records", line_count(&bronze_path).to_string()),
+                        ("status", "Success".to_string()),
+                    ]),
+                    row(vec![
+                        ("stage", "Bronze → Silver".to_string()),
+                        ("records", line_count(&silver_path).to_string()),
+                        ("status", "Success".to_string()),
+                    ]),
+                    row(vec![
+                        ("stage", "Silver → Gold".to_string()),
+                        ("records", line_count(&gold_path).to_string()),
+                        ("status", "Success".to_string()),
+                    ]),
                 ],
             })
         }
@@ -921,7 +1083,10 @@ fn workspace_action(
                     rows.push(row(vec![
                         ("source", value["source"].as_str().unwrap_or("").to_string()),
                         ("category", value["category"].as_str().unwrap_or("").to_string()),
-                        ("sensor_type", value["sensor_type"].as_str().unwrap_or("").to_string()),
+                        (
+                            "sensor_type",
+                            value["sensor_type"].as_str().unwrap_or("").to_string(),
+                        ),
                         ("value", value["value"].as_str().unwrap_or("").to_string()),
                     ]));
                 }
@@ -945,7 +1110,15 @@ fn workspace_action(
         "Export" => {
             let export_path = data_dir()?.join("exports").join("workspace_logs_export.csv");
             let rows = log_rows()?;
-            let headers = vec!["log_id", "log_file", "timestamp", "level", "action", "message", "source"];
+            let headers = vec![
+                "log_id",
+                "log_file",
+                "timestamp",
+                "level",
+                "action",
+                "message",
+                "source",
+            ];
 
             let mut csv = String::new();
             csv.push_str("\u{FEFF}");
@@ -983,13 +1156,19 @@ fn workspace_action(
         "Console" => Ok(WorkspaceOutput {
             title: "Console".to_string(),
             message: "Data Engine console ready.".to_string(),
-            rows: vec![row(vec![("command", "Data Engine console".to_string()), ("status", "ready".to_string())])],
+            rows: vec![row(vec![
+                ("command", "Data Engine console".to_string()),
+                ("status", "ready".to_string()),
+            ])],
         }),
 
         "Settings" => Ok(WorkspaceOutput {
             title: "Settings".to_string(),
             message: "Settings loaded.".to_string(),
-            rows: vec![row(vec![("setting", "Data Drive limit".to_string()), ("value", "500 MB".to_string())])],
+            rows: vec![row(vec![
+                ("setting", "Data Drive limit".to_string()),
+                ("value", format_bytes(DATA_ENGINE_MAX_BYTES)),
+            ])],
         }),
 
         _ => Ok(WorkspaceOutput {
@@ -998,6 +1177,99 @@ fn workspace_action(
             rows: vec![],
         }),
     }
+}
+
+#[tauri::command]
+fn start_agent_worker() -> Result<AgentTaskResult, String> {
+    let root = find_data_platform_root()?;
+    let agents = agent_dir()?;
+
+    let worker = agents.join("agent_worker.py");
+    let log = agents.join("agent.log");
+
+    if !worker.exists() {
+        return Err(format!(
+            "Agent worker not found at {}",
+            worker.to_string_lossy()
+        ));
+    }
+
+    let log_file = fs::File::create(&log)
+        .map_err(|error| format!("Unable to create agent log: {}", error))?;
+
+    Command::new("python3")
+        .arg("-u")
+        .arg(&worker)
+        .current_dir(&root)
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("Unable to start agent worker: {}", error))?;
+
+    Ok(AgentTaskResult {
+        success: true,
+        message: "Agent worker started.".to_string(),
+        path: log.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn submit_agent_task(input: String) -> Result<AgentTaskResult, String> {
+    let agents = agent_dir()?;
+    let input_file = agents.join("agent_input.json");
+
+    let clean_input = input.trim();
+
+    if clean_input.is_empty() {
+        return Err("Enter a question before asking the agent.".to_string());
+    }
+
+    let payload = json!({
+        "input": clean_input,
+        "status": "new",
+        "timestamp": timestamp()?
+    });
+
+    fs::write(
+        &input_file,
+        serde_json::to_string_pretty(&payload).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("Unable to write agent input: {}", error))?;
+
+    Ok(AgentTaskResult {
+        success: true,
+        message: "Task submitted to agent.".to_string(),
+        path: input_file.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn read_agent_output() -> Result<String, String> {
+    let agents = agent_dir()?;
+    let output_file = agents.join("agent_output.json");
+
+    if !output_file.exists() {
+        return Err(format!(
+            "Agent output file not found yet: {}",
+            output_file.to_string_lossy()
+        ));
+    }
+
+    fs::read_to_string(&output_file)
+        .map_err(|error| format!("Unable to read agent output: {}", error))
+}
+
+#[tauri::command]
+fn read_agent_log() -> Result<String, String> {
+    let agents = agent_dir()?;
+    let log_file = agents.join("agent.log");
+
+    if !log_file.exists() {
+        return Ok("No agent log found yet.".to_string());
+    }
+
+    fs::read_to_string(&log_file)
+        .map_err(|error| format!("Unable to read agent log: {}", error))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1011,7 +1283,11 @@ pub fn run() {
             connect_data,
             create_database,
             workspace_refresh,
-            workspace_action
+            workspace_action,
+            start_agent_worker,
+            submit_agent_task,
+            read_agent_output,
+            read_agent_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
