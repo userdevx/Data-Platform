@@ -1,0 +1,40 @@
+{
+  "name": "data-platform",
+  "version": "1.0.0",
+  "description": "Data Platform is a full-stack data platform for collecting, processing, storing, querying, and visualizing structured data from systems, devices, APIs, cloud services, and external sources.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "test": "echo \"No tests configured yet\"",
+    "agent:server": "tsx src/agentServer.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/userdevx/Data-Platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/userdevx/Data-Platform/issues"
+  },
+  "homepage": "https://github.com/userdevx/Data-Platform#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "openai": "^6.39.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}
