@@ -1,9 +1,33 @@
+# Python virtual environments
 venv/
 venv~/
+
+# Python cache and test cache
 __pycache__/
+*.pyc
 .pytest_cache/
 
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Logs
 logs/
+*.log
+
+# Temporary and backup files
+*.tmp
+*.backup
+*.save
+*.save.*
+
+# Data Platform generated data
 data/*.tmp
 data/*.backup
 data/**/*.json
@@ -12,13 +36,19 @@ data/**/*.backup
 data/imports/
 data/databases/
 data/data_lake/
+data/memory/
+data/logs/
+data/reports/
 
+# Lakehouse generated files
 data_lake/**/*.jsonl
 data_lake/**/*.parquet
 
+# Camera output
 output/camera/*
 !output/camera/.gitkeep
 
+# Tauri / application build artifacts
 application/data-platform-app/node_modules/
 application/data-platform-app/dist/
 application/data-platform-app/src-tauri/target/
@@ -26,5 +56,8 @@ application/data-platform-app/data/
 application/data-platform-app/logs/
 application/data-platform-app/**/*.log
 
-*.save
-*.save.*
+# TypeScript generated files inside Tauri app source
+application/data-platform-app/**/*.js
+application/data-platform-app/**/*.js.map
+application/data-platform-app/**/*.d.ts
+application/data-platform-app/**/*.d.ts.map
