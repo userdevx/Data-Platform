@@ -1,0 +1,84 @@
+.mode-switcher {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(18px);
+  padding: 14px 22px;
+}
+
+.mode-switcher-copy p {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mode-switcher-copy h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+}
+
+.mode-switcher-buttons {
+  display: flex;
+  gap: 8px;
+  border: 1px solid #dbe3ef;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 6px;
+}
+
+.mode-switcher-buttons button {
+  min-height: 38px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 8px 14px;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.mode-switcher-buttons button:hover {
+  transform: translateY(-1px);
+  color: #1d4ed8;
+}
+
+.mode-switcher-buttons button.active {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+}
+
+@media (max-width: 720px) {
+  .mode-switcher {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .mode-switcher-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 18px;
+  }
+
+  .mode-switcher-buttons button {
+    border-radius: 14px;
+  }
+}

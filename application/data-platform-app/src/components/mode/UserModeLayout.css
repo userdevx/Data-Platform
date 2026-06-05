@@ -1,0 +1,146 @@
+.user-mode-layout {
+  min-height: calc(100vh - 72px);
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  background: #f8fafc;
+}
+
+.user-mode-sidebar {
+  border-right: 1px solid #e2e8f0;
+  background: #061426;
+  padding: 20px 14px;
+}
+
+.user-mode-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  color: #ffffff;
+}
+
+.user-mode-logo {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2563eb, #60a5fa);
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.user-mode-brand strong,
+.user-mode-brand span {
+  display: block;
+}
+
+.user-mode-brand span {
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.user-mode-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.user-mode-nav button {
+  min-height: 44px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  padding: 12px 14px;
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.user-mode-nav button:hover,
+.user-mode-nav button.active {
+  transform: translateY(-1px);
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.user-mode-content {
+  padding: 30px 34px;
+}
+
+.user-mode-header {
+  margin-bottom: 18px;
+}
+
+.user-mode-header p {
+  margin: 0 0 6px;
+  color: #64748b;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.user-mode-header h2 {
+  margin: 0 0 8px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: -0.06em;
+}
+
+.user-mode-header span {
+  color: #64748b;
+}
+
+.user-mode-placeholder {
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 22px;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.06);
+}
+
+.user-mode-placeholder h3 {
+  margin: 0 0 10px;
+}
+
+.user-mode-placeholder p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+@media (max-width: 850px) {
+  .user-mode-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .user-mode-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .user-mode-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .user-mode-nav button {
+    text-align: center;
+  }
+
+  .user-mode-content {
+    padding: 18px 14px 28px;
+  }
+}
+
+@media (max-width: 520px) {
+  .user-mode-nav {
+    grid-template-columns: 1fr 1fr;
+  }
+}
