@@ -1,3 +1,5 @@
+mod developer_terminal;
+
 use serde::Serialize;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -1287,7 +1289,9 @@ pub fn run() {
             start_agent_worker,
             submit_agent_task,
             read_agent_output,
-            read_agent_log
+            read_agent_log,
+            developer_terminal::get_developer_terminal_context,
+            developer_terminal::run_developer_terminal_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

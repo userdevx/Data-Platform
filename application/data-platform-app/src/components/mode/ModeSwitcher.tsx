@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { AppMode } from "../../types/appModes";
 import { modeOptions } from "../../types/appModes";
 import "./ModeSwitcher.css";
@@ -11,26 +12,68 @@ export default function ModeSwitcher({
   activeMode,
   onModeChange
 }: ModeSwitcherProps) {
-  return (
-    <section className="mode-switcher" aria-label="Application mode switcher">
-      <div className="mode-switcher-copy">
-        <p>Data Platform</p>
-        <h1>{activeMode === "user" ? "User Mode" : "Developer Mode"}</h1>
-      </div>
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-      <div className="mode-switcher-buttons">
-        {modeOptions.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={activeMode === option.id ? "active" : ""}
-            onClick={() => onModeChange(option.id)}
-            title={option.description}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </section>
+  function selectMode(mode: AppMode) {
+    onModeChange(mode);
+    setIsOpen(false);
+  }
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (!menuRef.current) return;
+
+      if (!menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  return (
+    <div className="mode-menu-wrap" ref={menuRef}>
+      <button
+        type="button"
+        className={isOpen ? "mode-dot-button active" : "mode-dot-button"}
+        aria-label="Open application menu"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      {isOpen ? (
+        <div className="mode-menu" role="menu">
+          {modeOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="menuitem"
+              className={activeMode === option.id ? "active" : ""}
+              onClick={() => selectMode(option.id)}
+            >
+              <span>{option.label}</span>
+              {activeMode === option.id ? <small>Active</small> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

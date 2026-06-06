@@ -33,19 +33,18 @@ export type DeveloperNavigationItem = {
   id: DeveloperModePage;
   label: string;
   description: string;
-  status: "Ready" | "Planned";
 };
 
 export const modeOptions: ModeOption[] = [
   {
     id: "user",
     label: "User Mode",
-    description: "Use the Data Platform application."
+    description: "Use the Data Platform."
   },
   {
     id: "developer",
     label: "Developer Mode",
-    description: "Build, test, debug, and inspect the platform."
+    description: "Open development tools."
   }
 ];
 
@@ -63,7 +62,7 @@ export const userModeNavigation: UserNavigationItem[] = [
   {
     id: "Paige",
     label: "Paige",
-    description: "Ask questions and review source-backed answers."
+    description: "Ask questions and review answers."
   },
   {
     id: "Queries",
@@ -85,44 +84,37 @@ export const userModeNavigation: UserNavigationItem[] = [
 export const developerModeNavigation: DeveloperNavigationItem[] = [
   {
     id: "Terminal",
-    label: "Terminal",
-    description: "Run project commands in a developer workspace.",
-    status: "Planned"
+    label: "Command Terminal",
+    description: "Run commands, review output, and inspect the Data Platform."
   },
   {
     id: "Git",
     label: "Git",
-    description: "Review repository status, commits, and changes.",
-    status: "Planned"
+    description: "Review repository status, branches, and recent commits."
   },
   {
     id: "Build",
     label: "Build",
-    description: "Run frontend, backend, Rust, and packaging checks.",
-    status: "Planned"
+    description: "Build the application and review build output."
   },
   {
     id: "Tests",
     label: "Tests",
-    description: "Run backend and application tests.",
-    status: "Planned"
+    description: "Run test suites and review results."
   },
   {
     id: "Logs",
     label: "Logs",
-    description: "View application, system, and Paige logs.",
-    status: "Planned"
+    description: "View application, engine, and Paige logs."
   },
   {
     id: "Processes",
     label: "Processes",
-    description: "Inspect running platform and worker processes.",
-    status: "Planned"
+    description: "Inspect running platform processes."
   },
   {
     id: "Environment",
     label: "Environment",
-    description: "View detected OS, shell, runtimes, and paths.",
-    status: "Planned"
+    description: "View OS, shell, runtime versions, and project paths."
   }
 ];
