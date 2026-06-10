@@ -473,7 +473,7 @@ export default function ButtonInterfacePage() {
 
       <aside className="workspace-sidebar">
         <header className="workspace-brand">
-          <div className="workspace-logo">▣</div>
+          <div className="workspace-logo" aria-hidden="true">▣</div>
 
           <div>
             <strong>Data Platform</strong>
@@ -486,31 +486,32 @@ export default function ButtonInterfacePage() {
             type="button"
             className={viewMode === "workspace" ? "active" : ""}
             onClick={() => setViewMode("workspace")}
+            title="View platform activity"
           >
-            Workspace
+            <span className="workspace-nav-icon" aria-hidden="true">▦</span>
+            <span className="workspace-nav-label">Workspace</span>
           </button>
 
           <button
             type="button"
             className={viewMode === "data" ? "active" : ""}
             onClick={() => setViewMode("data")}
+            title="Connect and organize data"
           >
-            Data
+            <span className="workspace-nav-icon" aria-hidden="true">◫</span>
+            <span className="workspace-nav-label">Data</span>
           </button>
 
           <button
             type="button"
             className={viewMode === "paige" ? "active" : ""}
             onClick={() => setViewMode("paige")}
+            title="Ask Paige and review answers"
           >
-            Paige
+            <span className="workspace-nav-icon" aria-hidden="true">✦</span>
+            <span className="workspace-nav-label">Paige</span>
           </button>
         </nav>
-
-        <section className="workspace-status-box">
-          <strong>Status</strong>
-          <span>{status}</span>
-        </section>
       </aside>
 
       <section className="workspace-main">

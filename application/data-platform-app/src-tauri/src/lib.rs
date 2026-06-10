@@ -1199,12 +1199,24 @@ fn start_agent_worker() -> Result<AgentTaskResult, String> {
     let log_file = fs::File::create(&log)
         .map_err(|error| format!("Unable to create agent log: {}", error))?;
 
-    Command::new("python3")
+    let python = root.join("venv").join("bin").join("python");
+    let python_command = if python.exists() {
+        python
+    } else {
+        PathBuf::from("python3")
+    };
+
+    let error_log = log_file
+        .try_clone()
+        .map_err(|error| format!("Unable to clone agent log: {}", error))?;
+
+    Command::new(python_command)
         .arg("-u")
-        .arg(&worker)
+        .arg("-m")
+        .arg("engine.agents.agent_worker")
         .current_dir(&root)
         .stdout(Stdio::from(log_file))
-        .stderr(Stdio::null())
+        .stderr(Stdio::from(error_log))
         .spawn()
         .map_err(|error| format!("Unable to start agent worker: {}", error))?;
 
@@ -1279,6 +1291,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|_app| {
+            // Paige auto-start on app launch
+            let _ = start_agent_worker();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_user_locations,
             read_directory,

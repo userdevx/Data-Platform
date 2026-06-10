@@ -198,8 +198,7 @@
 }
 
 .developer-command-row button,
-.developer-terminal-actions button,
-.developer-quick-commands button {
+.developer-terminal-actions button {
   border: 1px solid #dbe3ef;
   border-radius: 14px;
   background: #ffffff;
@@ -221,39 +220,26 @@
 }
 
 .developer-command-row button:hover,
-.developer-terminal-actions button:hover,
-.developer-quick-commands button:hover {
+.developer-terminal-actions button:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
 }
 
-.developer-command-row button:disabled,
-.developer-quick-commands button:disabled {
+.developer-command-row button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.developer-quick-commands {
+.developer-terminal-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
 
-.developer-quick-commands button {
-  font-size: 0.78rem;
-  padding: 8px 10px;
-}
-
-.developer-terminal-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
 .developer-terminal-output {
-  min-height: 320px;
-  max-height: 520px;
+  min-height: 520px;
+  max-height: 70vh;
   overflow: auto;
   margin: 0;
   border-radius: 18px;
@@ -261,7 +247,16 @@
   background: #020617;
   color: #dbeafe;
   padding: 18px;
-  line-height: 1.6;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.86rem;
+  line-height: 1.65;
   white-space: pre-wrap;
 }
 
@@ -289,5 +284,9 @@
 
   .developer-mode-content {
     padding: 18px 14px 28px;
+  }
+
+  .developer-terminal-output {
+    min-height: 440px;
   }
 }

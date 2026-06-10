@@ -3,7 +3,10 @@ use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static PAIGE_STARTED: Mutex<bool> = Mutex::new(false);
 
 #[derive(Serialize)]
 pub struct AgentTaskResult {
@@ -47,13 +50,34 @@ fn agent_dir() -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn python_path(root: &PathBuf) -> PathBuf {
+    let venv_python = root.join("venv").join("bin").join("python");
+
+    if venv_python.exists() {
+        return venv_python;
+    }
+
+    PathBuf::from("python3")
+}
+
 #[tauri::command]
 pub fn start_agent_worker() -> Result<AgentTaskResult, String> {
+    let mut started = PAIGE_STARTED.lock().map_err(|error| error.to_string())?;
+
+    if *started {
+        return Ok(AgentTaskResult {
+            success: true,
+            message: "Paige is already running.".to_string(),
+            path: "".to_string(),
+        });
+    }
+
     let root = find_project_root()?;
     let agents = agent_dir()?;
 
     let worker = agents.join("agent_worker.py");
     let log = agents.join("agent.log");
+    let python = python_path(&root);
 
     if !worker.exists() {
         return Err(format!(
@@ -63,19 +87,23 @@ pub fn start_agent_worker() -> Result<AgentTaskResult, String> {
     }
 
     let log_file = fs::File::create(&log).map_err(|error| error.to_string())?;
+    let error_log = log_file.try_clone().map_err(|error| error.to_string())?;
 
-    Command::new("python3")
+    Command::new(python)
         .arg("-u")
-        .arg(&worker)
+        .arg("-m")
+        .arg("engine.agents.agent_worker")
         .current_dir(&root)
         .stdout(Stdio::from(log_file))
-        .stderr(Stdio::null())
+        .stderr(Stdio::from(error_log))
         .spawn()
         .map_err(|error| error.to_string())?;
 
+    *started = true;
+
     Ok(AgentTaskResult {
         success: true,
-        message: "Agent worker started.".to_string(),
+        message: "Paige started automatically.".to_string(),
         path: log.to_string_lossy().to_string(),
     })
 }
@@ -88,7 +116,7 @@ pub fn submit_agent_task(input: String) -> Result<AgentTaskResult, String> {
     let clean_input = input.trim();
 
     if clean_input.is_empty() {
-        return Err("Enter a question before asking the agent.".to_string());
+        return Err("Enter a question before asking Paige.".to_string());
     }
 
     let payload = json!({
@@ -105,7 +133,7 @@ pub fn submit_agent_task(input: String) -> Result<AgentTaskResult, String> {
 
     Ok(AgentTaskResult {
         success: true,
-        message: "Task submitted to agent.".to_string(),
+        message: "Question submitted to Paige.".to_string(),
         path: input_file.to_string_lossy().to_string(),
     })
 }

@@ -30,48 +30,275 @@ type DeveloperTerminalResponse = {
   timestamp: number;
 };
 
-const commandGroups: Record<DeveloperModePage, string[]> = {
-  Terminal: [
-    "pwd",
-    "ls",
-    "git status --short",
-    "python3 --version",
-    "node --version",
-    "npm --version"
-  ],
-  Git: [
-    "git status --short",
-    "git log --oneline -5",
-    "git branch --show-current"
-  ],
-  Build: [
-    "cd application/data-platform-app && npm run build",
-    "cd application/data-platform-app/src-tauri && cargo check"
-  ],
-  Tests: [
-    "source venv/bin/activate && python -m pytest",
-    "source venv/bin/activate && python -m pytest tests/test_ui_actions.py"
-  ],
-  Logs: [
-    "tail -n 80 engine/agents/agent.log",
-    "ls -la logs",
-    "find data -maxdepth 3 -type f | head -40"
-  ],
-  Processes: [
-    "ps aux | grep -E 'tauri|vite|python|node' | grep -v grep",
-    "pgrep -af 'tauri|vite|python|node'"
-  ],
-  Environment: [
-    "uname -a",
-    "echo $SHELL",
-    "pwd",
-    "python3 --version",
-    "node --version",
-    "npm --version",
-    "rustc --version",
-    "cargo --version"
-  ]
+type CommandItem = {
+  number: number;
+  command: string;
+  summary: string;
+  detail: string;
 };
+
+type CommandGroup = {
+  title: string;
+  commands: CommandItem[];
+};
+
+const commandLibrary: CommandGroup[] = [
+  {
+    title: "Basic Navigation",
+    commands: [
+      {
+        number: 1,
+        command: "pwd",
+        summary: "Shows the current folder.",
+        detail: "Use this to confirm where the Command Terminal is running."
+      },
+      {
+        number: 2,
+        command: "ls",
+        summary: "Lists files and folders.",
+        detail: "Use this to see what exists in the current folder."
+      },
+      {
+        number: 3,
+        command: "clear",
+        summary: "Clears the terminal output.",
+        detail: "This does not delete files or change the project. It only clears what is displayed."
+      },
+      {
+        number: 4,
+        command: "cd application/data-platform-app && ls",
+        summary: "Lists the application interface files.",
+        detail: "Use this to inspect the Tauri application folder."
+      }
+    ]
+  },
+  {
+    title: "Git",
+    commands: [
+      {
+        number: 1,
+        command: "git status --short",
+        summary: "Shows changed and untracked files.",
+        detail: "Use this before saving work to Git."
+      },
+      {
+        number: 2,
+        command: "git log --oneline -5",
+        summary: "Shows the five latest commits.",
+        detail: "Use this to confirm recent saved checkpoints."
+      },
+      {
+        number: 3,
+        command: "git branch --show-current",
+        summary: "Shows the active Git branch.",
+        detail: "Use this before committing or pushing."
+      }
+    ]
+  },
+  {
+    title: "Application",
+    commands: [
+      {
+        number: 1,
+        command: "cd application/data-platform-app && npm run build",
+        summary: "Builds the application interface.",
+        detail: "Use this after changing frontend files."
+      },
+      {
+        number: 2,
+        command: "cd application/data-platform-app && npm run tauri dev",
+        summary: "Starts the Data Platform application.",
+        detail: "Use this to open and test the application."
+      },
+      {
+        number: 3,
+        command: "cd application/data-platform-app && npm run",
+        summary: "Shows available npm scripts.",
+        detail: "Use this to see build, dev, preview, and tauri scripts."
+      }
+    ]
+  },
+  {
+    title: "Rust / Tauri",
+    commands: [
+      {
+        number: 1,
+        command: "cd application/data-platform-app/src-tauri && cargo check",
+        summary: "Checks the Rust backend.",
+        detail: "Use this after changing lib.rs or Tauri command files."
+      },
+      {
+        number: 2,
+        command: "rustc --version",
+        summary: "Shows the Rust compiler version.",
+        detail: "Use this to confirm Rust is installed."
+      },
+      {
+        number: 3,
+        command: "cargo --version",
+        summary: "Shows the Cargo version.",
+        detail: "Use this to confirm Cargo is installed."
+      }
+    ]
+  },
+  {
+    title: "Python / Data Engine",
+    commands: [
+      {
+        number: 1,
+        command: "python3 --version",
+        summary: "Shows the Python version.",
+        detail: "Use this before running Data Engine scripts."
+      },
+      {
+        number: 2,
+        command: "source venv/bin/activate && python -m pytest",
+        summary: "Runs the backend test suite.",
+        detail: "Use this after changing engine code."
+      },
+      {
+        number: 3,
+        command: "source venv/bin/activate && python -m engine.warehouse.build_motion_warehouse",
+        summary: "Builds the motion warehouse.",
+        detail: "Use this to rebuild stored motion records."
+      }
+    ]
+  },
+  {
+    title: "Paige",
+    commands: [
+      {
+        number: 1,
+        command: "tail -n 80 engine/agents/agent.log",
+        summary: "Shows recent Paige log output.",
+        detail: "Use this when Paige needs debugging."
+      },
+      {
+        number: 2,
+        command: "source venv/bin/activate && python -m engine.agents.agent_worker",
+        summary: "Runs the Paige worker.",
+        detail: "Use this to start the backend worker."
+      },
+      {
+        number: 3,
+        command: "find engine/agents -maxdepth 2 -type f",
+        summary: "Lists Paige files.",
+        detail: "Use this to inspect worker files, logs, and output files."
+      }
+    ]
+  },
+  {
+    title: "Logs",
+    commands: [
+      {
+        number: 1,
+        command: "ls -la logs",
+        summary: "Lists project logs.",
+        detail: "Use this to see available log files."
+      },
+      {
+        number: 2,
+        command: "find data -maxdepth 3 -type f | head -40",
+        summary: "Shows stored data files.",
+        detail: "Use this to inspect local data output."
+      },
+      {
+        number: 3,
+        command: "find engine -maxdepth 3 -type f | head -60",
+        summary: "Shows engine files.",
+        detail: "Use this to inspect the Data Engine structure."
+      }
+    ]
+  },
+  {
+    title: "Processes",
+    commands: [
+      {
+        number: 1,
+        command: "ps aux | grep -E 'tauri|vite|python|node' | grep -v grep",
+        summary: "Shows running platform processes.",
+        detail: "Use this if the app says a port is already in use."
+      },
+      {
+        number: 2,
+        command: "pgrep -af 'tauri|vite|python|node'",
+        summary: "Shows matching process IDs.",
+        detail: "Use this when you need to identify active development processes."
+      }
+    ]
+  },
+  {
+    title: "Environment",
+    commands: [
+      {
+        number: 1,
+        command: "uname -a",
+        summary: "Shows operating system details.",
+        detail: "Use this to inspect the Linux environment."
+      },
+      {
+        number: 2,
+        command: "echo $SHELL",
+        summary: "Shows the active shell.",
+        detail: "Use this to confirm the shell path."
+      },
+      {
+        number: 3,
+        command: "node --version",
+        summary: "Shows the Node.js version.",
+        detail: "Use this before running npm commands."
+      },
+      {
+        number: 4,
+        command: "npm --version",
+        summary: "Shows the npm version.",
+        detail: "Use this before building the frontend."
+      }
+    ]
+  }
+];
+
+const commandGroupsByPage: Record<DeveloperModePage, CommandGroup[]> = {
+  Terminal: commandLibrary,
+  Git: commandLibrary.filter((group) => group.title === "Git"),
+  Build: commandLibrary.filter(
+    (group) => group.title === "Application" || group.title === "Rust / Tauri"
+  ),
+  Tests: commandLibrary.filter((group) => group.title === "Python / Data Engine"),
+  Logs: commandLibrary.filter((group) => group.title === "Logs" || group.title === "Paige"),
+  Processes: commandLibrary.filter((group) => group.title === "Processes"),
+  Environment: commandLibrary.filter((group) => group.title === "Environment")
+};
+
+function firstCommandForPage(page: DeveloperModePage) {
+  return commandGroupsByPage[page][0].commands[0].command;
+}
+
+function commandGuideText(groups: CommandGroup[]) {
+  const lines: string[] = [];
+
+  lines.push("Command Terminal");
+  lines.push("");
+  lines.push("Type a command and press Enter.");
+  lines.push("");
+  lines.push("Built-in:");
+  lines.push("  help     Show this command list");
+  lines.push("  clear    Clear the terminal output");
+  lines.push("");
+
+  for (const group of groups) {
+    lines.push(`${group.title}:`);
+
+    for (const item of group.commands) {
+      lines.push(`  ${item.number}. ${item.command}`);
+      lines.push(`     ${item.summary}`);
+      lines.push(`     ${item.detail}`);
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n");
+}
 
 function formatTerminalOutput(result: DeveloperTerminalResponse) {
   return [
@@ -96,13 +323,13 @@ export default function DeveloperModeLayout({
   onPageChange
 }: DeveloperModeLayoutProps) {
   const activeItem = developerModeNavigation.find((item) => item.id === activePage);
-  const quickCommands = commandGroups[activePage];
+  const visibleCommandGroups = commandGroupsByPage[activePage];
 
   const [terminalContext, setTerminalContext] =
     useState<DeveloperTerminalContext | null>(null);
 
-  const [command, setCommand] = useState(quickCommands[0]);
-  const [output, setOutput] = useState("Terminal ready. Enter a command or choose a quick command.");
+  const [command, setCommand] = useState(firstCommandForPage(activePage));
+  const [output, setOutput] = useState(commandGuideText(commandGroupsByPage.Terminal));
   const [isRunning, setIsRunning] = useState(false);
   const [lastStatus, setLastStatus] = useState("Ready");
 
@@ -125,6 +352,18 @@ export default function DeveloperModeLayout({
     if (!cleanCommand) {
       setOutput("Enter a command first.");
       setLastStatus("Waiting");
+      return;
+    }
+
+    if (cleanCommand === "help") {
+      setOutput(commandGuideText(visibleCommandGroups));
+      setLastStatus("Ready");
+      return;
+    }
+
+    if (cleanCommand === "clear") {
+      setOutput("Terminal cleared. Type help to show commands.");
+      setLastStatus("Cleared");
       return;
     }
 
@@ -157,11 +396,6 @@ export default function DeveloperModeLayout({
     setLastStatus("Copied");
   }
 
-  function clearOutput() {
-    setOutput("Terminal cleared.");
-    setLastStatus("Cleared");
-  }
-
   function runCommandOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       void runCommand();
@@ -173,9 +407,8 @@ export default function DeveloperModeLayout({
   }, []);
 
   useEffect(() => {
-    const nextCommand = commandGroups[activePage][0];
-    setCommand(nextCommand);
-    setOutput(`${activePage} ready. Enter a command or choose a quick command.`);
+    setCommand(firstCommandForPage(activePage));
+    setOutput(commandGuideText(visibleCommandGroups));
     setLastStatus("Ready");
   }, [activePage]);
 
@@ -187,7 +420,7 @@ export default function DeveloperModeLayout({
 
           <div>
             <strong>Developer Mode</strong>
-            <span>System workspace</span>
+            <span>Development workspace</span>
           </div>
         </div>
 
@@ -216,10 +449,8 @@ export default function DeveloperModeLayout({
         <section className="developer-terminal-card">
           <div className="developer-terminal-top">
             <div>
-              <h3>{activePage}</h3>
-              <p>
-                Commands run through the operating system from the detected Data Platform project folder.
-              </p>
+              <h3>Command Terminal</h3>
+              <p>Use this workspace to run commands, review output, and inspect the Data Platform.</p>
             </div>
 
             <strong
@@ -269,28 +500,22 @@ export default function DeveloperModeLayout({
             </button>
           </div>
 
-          <div className="developer-quick-commands">
-            {quickCommands.map((quickCommand) => (
-              <button
-                key={quickCommand}
-                type="button"
-                onClick={() => {
-                  setCommand(quickCommand);
-                  void runCommand(quickCommand);
-                }}
-                disabled={isRunning}
-              >
-                {quickCommand}
-              </button>
-            ))}
-          </div>
-
           <div className="developer-terminal-actions">
+            <button type="button" onClick={() => void runCommand("help")}>
+              Show Commands
+            </button>
+
             <button type="button" onClick={() => void copyOutput()}>
               Copy Output
             </button>
 
-            <button type="button" onClick={clearOutput}>
+            <button
+              type="button"
+              onClick={() => {
+                setOutput("Terminal cleared. Type help to show commands.");
+                setLastStatus("Cleared");
+              }}
+            >
               Clear Output
             </button>
           </div>

@@ -71,6 +71,12 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
       setSubmittedQuestion(cleanQuestion);
       setStatus("Sending your question...");
 
+      setStatus("Starting Paige worker...");
+
+      const startResult = await invoke<unknown>("start_agent_worker");
+
+      setStatus(`${getResultMessage(startResult)} Sending your question...`);
+
       const submitResult = await invoke<unknown>("submit_agent_task", {
         input: cleanQuestion
       });
