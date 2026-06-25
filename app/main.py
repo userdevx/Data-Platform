@@ -1,7 +1,7 @@
 from engine.backend import get_backend
 from engine.exceptions import EngineError
 from engine.logger import log_error, log_info
-from engine.models import SensorRecord
+from engine.models import DataRecord
 from engine.output import format_response
 from engine.query import QueryService
 
@@ -14,16 +14,6 @@ def prompt_for_int(message):
             return int(user_input)
         except ValueError:
             print("Please enter a whole number only.")
-
-
-def prompt_for_float(message):
-    while True:
-        user_input = input(message).strip()
-
-        try:
-            return float(user_input)
-        except ValueError:
-            print("Please enter a number only.")
 
 
 def prompt_for_page():
@@ -54,6 +44,23 @@ def prompt_for_limit():
         return 10
 
 
+def prompt_for_value():
+    value = input("Enter value: ").strip()
+
+    if value.lower() == "true":
+        return True
+
+    if value.lower() == "false":
+        return False
+
+    try:
+        if "." in value:
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
+
+
 def show_records(records, event_name):
     page = prompt_for_page()
     limit = prompt_for_limit()
@@ -66,11 +73,21 @@ def show_records(records, event_name):
     print(format_response(records, page=page, limit=limit))
 
 
+def show_help():
+    print(
+        "Commands: insert, read, get, delete, filter, where, "
+        "greater, less, sort, help, exit"
+    )
+
+
 def main():
     backend = get_backend()
     service = QueryService(backend)
 
     log_info("engine_start", "Data engine CLI started")
+
+    print("Data engine started.")
+    show_help()
 
     while True:
         command = input("engine > ").strip().lower()
@@ -83,17 +100,20 @@ def main():
                 print("Exiting engine")
                 break
 
+            elif command == "help":
+                show_help()
+
             elif command == "insert":
-                sensor_record = SensorRecord.create(
+                record = DataRecord.create(
                     id=prompt_for_int("Enter id: "),
                     source=input("Enter source: ").strip(),
                     category=input("Enter category: ").strip(),
-                    sensor_type=input("Enter sensor type: ").strip(),
-                    value=prompt_for_float("Enter value: "),
+                    data_type=input("Enter data type: ").strip(),
+                    value=prompt_for_value(),
                     unit=input("Enter unit: ").strip(),
                 )
 
-                result = service.insert_record(sensor_record.to_dict())
+                result = service.insert_record(record.to_dict())
 
                 log_info(
                     "record_inserted",
@@ -193,7 +213,7 @@ def main():
                 show_records(records, "where_output")
 
             elif command == "greater":
-                value = prompt_for_float("Enter value: ")
+                value = input("Enter value: ").strip()
 
                 records = service.filter_value_greater_than(value)
 
@@ -205,7 +225,7 @@ def main():
                 show_records(records, "greater_output")
 
             elif command == "less":
-                value = prompt_for_float("Enter value: ")
+                value = input("Enter value: ").strip()
 
                 records = service.filter_value_less_than(value)
 
@@ -236,7 +256,7 @@ def main():
 
                 print(
                     "Unknown command. Use: insert, read, get, "
-                    "delete, filter, where, greater, less, sort, exit"
+                    "delete, filter, where, greater, less, sort, help, exit"
                 )
 
         except EngineError as error:

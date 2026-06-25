@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+from typing import Any
 
 from engine.exceptions import ValidationError
 
@@ -9,12 +10,12 @@ def current_timestamp():
 
 
 @dataclass
-class SensorRecord:
+class DataRecord:
     id: int
     source: str
     category: str
-    sensor_type: str
-    value: float
+    data_type: str
+    value: Any
     unit: str
     created_at: str
     updated_at: str
@@ -29,11 +30,11 @@ class SensorRecord:
         if not isinstance(self.category, str) or not self.category.strip():
             raise ValidationError("Field 'category' must be a non-empty string")
 
-        if not isinstance(self.sensor_type, str) or not self.sensor_type.strip():
-            raise ValidationError("Field 'sensor_type' must be a non-empty string")
+        if not isinstance(self.data_type, str) or not self.data_type.strip():
+            raise ValidationError("Field 'data_type' must be a non-empty string")
 
-        if not isinstance(self.value, (int, float)):
-            raise ValidationError("Field 'value' must be a number")
+        if self.value is None:
+            raise ValidationError("Field 'value' cannot be empty")
 
         if not isinstance(self.unit, str) or not self.unit.strip():
             raise ValidationError("Field 'unit' must be a non-empty string")
@@ -49,14 +50,15 @@ class SensorRecord:
         return asdict(self)
 
     @classmethod
-    def create(cls, id, source, category, sensor_type, value, unit):
+    def create(cls, id, source, category, data_type, value, unit):
         now = current_timestamp()
+
         return cls(
             id=id,
             source=source,
             category=category,
-            sensor_type=sensor_type,
-            value=float(value),
+            data_type=data_type,
+            value=value,
             unit=unit,
             created_at=now,
             updated_at=now,

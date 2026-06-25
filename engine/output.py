@@ -29,6 +29,10 @@ def paginate_records(records, page=1, limit=10):
     }
 
 
+def get_record_data_type(record):
+    return record.get("data_type") or record.get("sensor_type", "")
+
+
 def format_table(records):
     if not records:
         return "No records found."
@@ -36,7 +40,7 @@ def format_table(records):
     columns = [
         "id",
         "category",
-        "sensor_type",
+        "data_type",
         "value",
         "unit",
         "created_at",
@@ -48,7 +52,7 @@ def format_table(records):
         rows.append([
             str(record.get("id", "")),
             str(record.get("category", "")),
-            str(record.get("sensor_type", "")),
+            str(get_record_data_type(record)),
             str(record.get("value", "")),
             str(record.get("unit", "")),
             str(record.get("created_at", "")),
