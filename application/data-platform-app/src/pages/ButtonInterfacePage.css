@@ -224,7 +224,7 @@ button:disabled {
 
 .workspace-primary-actions,
 .workspace-button-row,
-.paige-input-row {
+.intelligence-input-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -318,7 +318,7 @@ button:disabled {
 }
 
 .workspace-label input,
-.paige-input-row input {
+.intelligence-input-row input {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 14px;
@@ -332,7 +332,7 @@ button:disabled {
 }
 
 .workspace-label input:focus,
-.paige-input-row input:focus {
+.intelligence-input-row input:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
@@ -356,12 +356,12 @@ button:disabled {
   word-break: break-all;
 }
 
-.paige-input-row {
+.intelligence-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.paige-status {
+.intelligence-status {
   border: 1px solid #bfdbfe;
   border-radius: 16px;
   background: #eff6ff;
@@ -632,7 +632,7 @@ button:disabled {
   }
 
   .workspace-button-row,
-  .paige-input-row {
+  .intelligence-input-row {
     display: grid;
     grid-template-columns: 1fr;
   }

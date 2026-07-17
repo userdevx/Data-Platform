@@ -23,22 +23,36 @@ fn now_timestamp() -> Result<u64, String> {
 }
 
 fn find_project_root() -> Result<PathBuf, String> {
-    let mut dir = std::env::current_dir().map_err(|error| error.to_string())?;
+    let mut candidates: Vec<PathBuf> = Vec::new();
 
-    loop {
-        let worker = dir.join("engine").join("agents").join("agent_worker.py");
+    if let Ok(current) = std::env::current_dir() {
+        let mut dir = current;
 
-        if worker.exists() {
-            return Ok(dir);
-        }
+        loop {
+            candidates.push(dir.clone());
 
-        if !dir.pop() {
-            return Err(
-                "Could not find Data-Platform project root. Expected engine/agents/agent_worker.py."
-                    .to_string(),
-            );
+            if !dir.pop() {
+                break;
+            }
         }
     }
+
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(PathBuf::from(home).join("Data-Platform"));
+    }
+
+    for candidate in candidates {
+        let worker = candidate.join("engine").join("agents").join("agent_worker.py");
+
+        if worker.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(
+        "Could not find Data-Platform runtime. Expected engine/agents/agent_worker.py."
+            .to_string(),
+    )
 }
 
 fn agent_dir() -> Result<PathBuf, String> {
@@ -67,7 +81,7 @@ pub fn start_agent_worker() -> Result<AgentTaskResult, String> {
     if *started {
         return Ok(AgentTaskResult {
             success: true,
-            message: "Paige is already running.".to_string(),
+            message: "Intelligence is already running.".to_string(),
             path: "".to_string(),
         });
     }
@@ -103,7 +117,7 @@ pub fn start_agent_worker() -> Result<AgentTaskResult, String> {
 
     Ok(AgentTaskResult {
         success: true,
-        message: "Paige started automatically.".to_string(),
+        message: "Intelligence started automatically.".to_string(),
         path: log.to_string_lossy().to_string(),
     })
 }
@@ -116,7 +130,7 @@ pub fn submit_agent_task(input: String) -> Result<AgentTaskResult, String> {
     let clean_input = input.trim();
 
     if clean_input.is_empty() {
-        return Err("Enter a question before asking Paige.".to_string());
+        return Err("Enter a question before submitting.".to_string());
     }
 
     let payload = json!({
@@ -133,7 +147,7 @@ pub fn submit_agent_task(input: String) -> Result<AgentTaskResult, String> {
 
     Ok(AgentTaskResult {
         success: true,
-        message: "Question submitted to Paige.".to_string(),
+        message: "Question submitted to the Intelligence Runtime.".to_string(),
         path: input_file.to_string_lossy().to_string(),
     })
 }

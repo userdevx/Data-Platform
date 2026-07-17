@@ -165,24 +165,24 @@ const commandLibrary: CommandGroup[] = [
     ]
   },
   {
-    title: "Paige",
+    title: "Intelligence",
     commands: [
       {
         number: 1,
         command: "tail -n 80 engine/agents/agent.log",
-        summary: "Shows recent Paige log output.",
-        detail: "Use this when Paige needs debugging."
+        summary: "Shows recent Intelligence Runtime log output.",
+        detail: "Use this when the Intelligence Runtime needs debugging."
       },
       {
         number: 2,
         command: "source venv/bin/activate && python -m engine.agents.agent_worker",
-        summary: "Runs the Paige worker.",
+        summary: "Runs the Intelligence Runtime worker.",
         detail: "Use this to start the backend worker."
       },
       {
         number: 3,
         command: "find engine/agents -maxdepth 2 -type f",
-        summary: "Lists Paige files.",
+        summary: "Lists Intelligence Runtime files.",
         detail: "Use this to inspect worker files, logs, and output files."
       }
     ]
@@ -265,7 +265,7 @@ const commandGroupsByPage: Record<DeveloperModePage, CommandGroup[]> = {
     (group) => group.title === "Application" || group.title === "Rust / Tauri"
   ),
   Tests: commandLibrary.filter((group) => group.title === "Python / Data Engine"),
-  Logs: commandLibrary.filter((group) => group.title === "Logs" || group.title === "Paige"),
+  Logs: commandLibrary.filter((group) => group.title === "Logs" || group.title === "Intelligence"),
   Processes: commandLibrary.filter((group) => group.title === "Processes"),
   Environment: commandLibrary.filter((group) => group.title === "Environment")
 };

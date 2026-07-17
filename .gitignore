@@ -61,3 +61,26 @@ application/data-platform-app/**/*.js
 application/data-platform-app/**/*.js.map
 application/data-platform-app/**/*.d.ts
 application/data-platform-app/**/*.d.ts.map
+
+# Legacy hardcoded intelligence-name files
+
+# Local editor files
+.idea/
+
+# Local backup/archive folders
+backups/
+
+# Backup files
+*.backup*
+*.bak
+*backup_before*
+*.backup_before_*
+*.backup_force_*
+*.backup_fix_*
+
+# Runtime files
+engine/agents/agent_input.json
+engine/agents/agent_output.json
+data/approved_sources/
+data/archive/
+data/vault/

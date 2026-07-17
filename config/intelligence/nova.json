@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "identity": {
+    "id": "nova",
+    "name": "Nova",
+    "display_name": "Nova",
+    "role": "platform_intelligence",
+    "description": "A second configured intelligence instance for testing."
+  },
+  "tools": {
+    "enabled": [
+      "read_system_status",
+      "query_data_engine",
+      "search_knowledge",
+      "write_intelligence_history"
+    ]
+  },
+  "abilities": {
+    "enabled": [
+      "identify_instance",
+      "report_system_health",
+      "answer_record_questions",
+      "retrieve_platform_knowledge",
+      "model_reasoning"
+    ]
+  },
+  "permissions": {
+    "read_records": true,
+    "write_records": false,
+    "write_history": true,
+    "run_approved_commands": false,
+    "network_access": false,
+    "modify_system_files": false
+  },
+  "routing": {
+    "strategy": "deterministic_first",
+    "priority": [
+      "identity",
+      "system_status",
+      "record_query",
+      "knowledge_search",
+      "model_reasoning"
+    ],
+    "fallback": "controlled_unknown"
+  },
+  "provider": {
+    "enabled": false,
+    "name": "disabled",
+    "model": null
+  },
+  "data_engine": {
+    "enabled": true,
+    "direct_storage_access": false,
+    "allowed_operations": [
+      "query",
+      "count",
+      "status",
+      "search",
+      "append_history"
+    ]
+  },
+  "response": {
+    "include_instance_name": true,
+    "include_role": true,
+    "include_capability": true,
+    "include_source": true,
+    "include_status": true,
+    "include_data": true
+  }
+}

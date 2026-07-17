@@ -32,7 +32,7 @@
     "category": "DeveloperTool",
     "shortDescription": "Data Platform Application Interface",
     "longDescription": "A cross-platform Application Interface for monitoring ingestion, records, queries, validation, reports, health metrics, and engine activity.",
-    "copyright": "Copyright © 2026 CCS Technologies",
+    "copyright": "Copyright \u00a9 2026 CCS Technologies",
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
@@ -51,6 +51,14 @@
       "deb": {
         "depends": []
       }
-    }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
   }
 }

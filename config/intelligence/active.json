@@ -1,0 +1,98 @@
+{
+  "version": "1.0.0",
+  "identity": {
+    "id": "default",
+    "name": "Intelligence",
+    "display_name": "Paige",
+    "role": "platform_intelligence",
+    "description": "The default configured intelligence instance for the Data Platform."
+  },
+  "tools": {
+    "enabled": [
+      "read_system_status",
+      "query_data_engine",
+      "search_knowledge",
+      "write_intelligence_history",
+      "public_source_search"
+    ]
+  },
+  "abilities": {
+    "enabled": [
+      "identify_instance",
+      "report_system_health",
+      "answer_record_questions",
+      "retrieve_platform_knowledge",
+      "model_reasoning",
+      "search_public_sources",
+      "answer_datetime_questions",
+      "manage_memory"
+    ]
+  },
+  "permissions": {
+    "read_records": true,
+    "write_records": false,
+    "write_history": true,
+    "run_approved_commands": false,
+    "network_access": true,
+    "modify_system_files": false
+  },
+  "routing": {
+    "strategy": "deterministic_first",
+    "priority": [
+      "identity",
+      "system_status",
+      "record_query",
+      "knowledge_search",
+      "public_source_search",
+      "datetime",
+      "memory_command",
+      "model_reasoning"
+    ],
+    "fallback": "controlled_unknown"
+  },
+  "provider": {
+    "enabled": true,
+    "name": "ollama",
+    "model": "llama3.2:3b"
+  },
+  "data_engine": {
+    "enabled": true,
+    "direct_storage_access": false,
+    "allowed_operations": [
+      "query",
+      "count",
+      "status",
+      "search",
+      "append_history"
+    ]
+  },
+  "response": {
+    "include_instance_name": true,
+    "include_role": true,
+    "include_capability": true,
+    "include_source": true,
+    "include_status": true,
+    "include_data": true
+  },
+  "validation": {
+    "enabled": true,
+    "max_answer_chars": 4000,
+    "require_answer": true,
+    "require_source": true,
+    "require_structured_data": true,
+    "blocked_response_phrases": [
+      "I can help you with",
+      "Hello. I'm",
+      "Hello. I\u2019m",
+      "No reason returned",
+      "unknown source",
+      "context_source"
+    ]
+  },
+  "memory": {
+    "enabled": true,
+    "source": "data_engine",
+    "storage_owner": "data_engine",
+    "context_budget": 1500
+  }
+}

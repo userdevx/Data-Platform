@@ -1,6 +1,6 @@
 import "./UserModeSidebar.css";
 
-export type UserModePage = "Workspace" | "Data" | "Paige";
+export type UserModePage = "Workspace" | "Data" | "Intelligence";
 
 type UserModeSidebarProps = {
   activePage: UserModePage;
@@ -26,8 +26,8 @@ const navItems: {
     icon: "◫"
   },
   {
-    id: "Paige",
-    label: "Paige",
+    id: "Intelligence",
+    label: "Intelligence",
     description: "Ask questions and review answers.",
     icon: "✦"
   }

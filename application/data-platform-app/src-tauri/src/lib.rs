@@ -1,4 +1,5 @@
 mod developer_terminal;
+mod intelligence_bridge;
 
 use serde::Serialize;
 use serde_json::json;
@@ -95,23 +96,36 @@ fn app_root() -> Result<PathBuf, String> {
 }
 
 fn find_data_platform_root() -> Result<PathBuf, String> {
-    let mut dir = std::env::current_dir()
-        .map_err(|error| format!("Unable to read current directory: {}", error))?;
+    let mut candidates: Vec<PathBuf> = Vec::new();
 
-    loop {
-        let worker = dir.join("engine").join("agents").join("agent_worker.py");
+    if let Ok(current) = std::env::current_dir() {
+        let mut dir = current;
 
-        if worker.exists() {
-            return Ok(dir);
-        }
+        loop {
+            candidates.push(dir.clone());
 
-        if !dir.pop() {
-            return Err(
-                "Could not find Data-Platform project root. Expected engine/agents/agent_worker.py."
-                    .to_string(),
-            );
+            if !dir.pop() {
+                break;
+            }
         }
     }
+
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(PathBuf::from(home).join("Data-Platform"));
+    }
+
+    for candidate in candidates {
+        let worker = candidate.join("engine").join("agents").join("agent_worker.py");
+
+        if worker.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(
+        "Could not find Data-Platform runtime. Expected engine/agents/agent_worker.py."
+            .to_string(),
+    )
 }
 
 fn data_dir() -> Result<PathBuf, String> {
@@ -791,6 +805,25 @@ fn create_database(
     })
 }
 
+
+fn ensure_workspace_storage(database_path: &str) -> Result<(), String> {
+    if database_path.trim().is_empty() {
+        return Ok(());
+    }
+
+    let root = PathBuf::from(database_path);
+
+    fs::create_dir_all(&root)
+        .map_err(|error| format!("Unable to create database folder: {}", error))?;
+
+    for folder in ["records", "knowledge", "indexes", "logs", "backups"] {
+        fs::create_dir_all(root.join(folder))
+            .map_err(|error| format!("Unable to create workspace storage folder: {}", error))?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn workspace_refresh(database_name: String, database_path: String) -> Result<WorkspaceDashboard, String> {
     let data = data_dir()?;
@@ -832,6 +865,8 @@ fn workspace_action(
     database_name: String,
     database_path: String,
 ) -> Result<WorkspaceOutput, String> {
+    ensure_workspace_storage(&database_path)?;
+
     match action.as_str() {
         "Dashboard" => Ok(WorkspaceOutput {
             title: "Dashboard".to_string(),
@@ -1285,6 +1320,100 @@ fn read_agent_log() -> Result<String, String> {
     fs::read_to_string(&log_file)
         .map_err(|error| format!("Unable to read agent log: {}", error))
 }
+#[tauri::command]
+fn update_data_platform() -> Result<String, String> {
+    let root = std::env::var("DATA_PLATFORM_ROOT")
+        .map(std::path::PathBuf::from)
+        .or_else(|_| {
+            std::env::var("HOME")
+                .map(|home| std::path::PathBuf::from(home).join("Data-Platform"))
+        })
+        .or_else(|_| {
+            std::env::var("USERPROFILE")
+                .map(|home| std::path::PathBuf::from(home).join("Data-Platform"))
+        })
+        .map_err(|error| format!("Could not locate Data Platform root: {}", error))?;
+
+    let app_dir = root.join("application").join("data-platform-app");
+
+    if !root.join(".git").exists() {
+        return Err(format!(
+            "Update stopped. This folder is not a Git project: {}",
+            root.display()
+        ));
+    }
+
+    if !app_dir.exists() {
+        return Err(format!(
+            "Update stopped. Application Interface folder was not found: {}",
+            app_dir.display()
+        ));
+    }
+
+    let script = format!(
+        r#"
+set -e
+cd "{root}"
+
+echo "1. Checking source status..."
+git status --short
+
+echo ""
+echo "2. Pulling latest Data Platform changes..."
+git pull --ff-only
+
+echo ""
+echo "3. Validating Intelligence Runtime files..."
+if [ -d "venv" ]; then
+  . venv/bin/activate
+fi
+
+python3 -m py_compile app/process_intelligence_request.py
+python3 -m py_compile engine/intelligence/models.py
+python3 -m py_compile engine/intelligence/definition.py
+python3 -m py_compile engine/intelligence/history.py
+python3 -m py_compile engine/intelligence/router.py
+python3 -m py_compile engine/intelligence/registry.py
+python3 -m py_compile engine/intelligence/capabilities/builtins.py
+python3 -m py_compile engine/intelligence/instance.py
+python3 -m py_compile engine/intelligence/factory.py
+
+echo ""
+echo "4. Installing Application Interface packages..."
+cd "{app_dir}"
+npm install
+
+echo ""
+echo "5. Building Application Interface..."
+npm run build
+
+echo ""
+echo "Update complete. Restart Data Platform to load the newest build."
+"#,
+        root = root.display(),
+        app_dir = app_dir.display()
+    );
+
+    let output = std::process::Command::new("bash")
+        .arg("-lc")
+        .arg(script)
+        .output()
+        .map_err(|error| format!("Failed to run update command: {}", error))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    if output.status.success() {
+        return Ok(stdout);
+    }
+
+    Err(format!(
+        "Update failed.\n\nSTDOUT:\n{}\n\nSTDERR:\n{}",
+        stdout,
+        stderr
+    ))
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -1292,11 +1421,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
-            // Paige auto-start on app launch
+            // Intelligence auto-start on app launch
             let _ = start_agent_worker();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            intelligence_bridge::process_intelligence_request,
+            intelligence_bridge::get_intelligence_definition,
+            intelligence_bridge::get_data_platform_root,
+            
+            
+            update_data_platform,
             get_user_locations,
             read_directory,
             connect_data,

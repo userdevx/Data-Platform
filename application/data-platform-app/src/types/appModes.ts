@@ -3,7 +3,7 @@ export type AppMode = "user" | "developer";
 export type UserModePage =
   | "Dashboard"
   | "Data"
-  | "Paige"
+  | "Intelligence"
   | "Queries"
   | "Pipelines"
   | "Settings";
@@ -60,8 +60,8 @@ export const userModeNavigation: UserNavigationItem[] = [
     description: "Connect files and create Data Engine databases."
   },
   {
-    id: "Paige",
-    label: "Paige",
+    id: "Intelligence",
+    label: "Intelligence",
     description: "Ask questions and review answers."
   },
   {
@@ -105,7 +105,7 @@ export const developerModeNavigation: DeveloperNavigationItem[] = [
   {
     id: "Logs",
     label: "Logs",
-    description: "View application, engine, and Paige logs."
+    description: "View application, engine, and Intelligence logs."
   },
   {
     id: "Processes",

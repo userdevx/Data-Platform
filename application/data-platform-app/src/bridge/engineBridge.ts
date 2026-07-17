@@ -45,3 +45,49 @@ function formatBridgeError(error: unknown): string {
 
   return "Unknown Engine Bridge error";
 }
+
+export type IntelligenceResult = {
+  status: string;
+  question: string;
+  route: string | null;
+  source: string | null;
+  reason: string | null;
+  answer: string;
+  matched: boolean | null;
+  classification?: Record<string, unknown>;
+  insights?: Record<string, unknown>;
+};
+
+export async function askIntelligence(question: string): Promise<IntelligenceResult> {
+  const cleanQuestion = question.trim();
+
+  if (!cleanQuestion) {
+    return {
+      status: "error",
+      question: "",
+      route: "none",
+      source: "none",
+      reason: "Question was empty.",
+      answer: "Enter a request first.",
+      matched: false,
+    };
+  }
+
+  const rawResponse = await invoke<string>("process_intelligence_request", {
+    question: cleanQuestion,
+  });
+
+  try {
+    return JSON.parse(rawResponse) as IntelligenceResult;
+  } catch {
+    return {
+      status: "error",
+      question: cleanQuestion,
+      route: "parse_error",
+      source: "engineBridge",
+      reason: "The application received invalid JSON from the Intelligence Runtime.",
+      answer: rawResponse,
+      matched: false,
+    };
+  }
+}
