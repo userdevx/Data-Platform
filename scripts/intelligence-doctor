@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "Intelligence Runtime Doctor"
+echo "==========================="
+echo
+
+if [ -f "venv/bin/activate" ]; then
+  source "venv/bin/activate"
+  echo "OK: Python virtual environment loaded."
+else
+  echo "ERROR: venv/bin/activate was not found."
+  exit 1
+fi
+
+required_files=(
+  "app/process_intelligence_request.py"
+  "engine/intelligence/models.py"
+  "engine/intelligence/definition.py"
+  "engine/intelligence/factory.py"
+  "engine/intelligence/instance.py"
+  "engine/intelligence/router.py"
+  "engine/intelligence/registry.py"
+  "engine/intelligence/history.py"
+  "engine/intelligence/capabilities/builtins.py"
+  "config/intelligence/default.json"
+)
+
+echo
+echo "Checking required runtime files..."
+
+for file in "${required_files[@]}"; do
+  if [ -f "$file" ]; then
+    echo "OK: $file"
+  else
+    echo "ERROR: Missing $file"
+    exit 1
+  fi
+done
+
+echo
+echo "Compiling Intelligence Runtime files..."
+
+python3 -m py_compile \
+  app/process_intelligence_request.py \
+  engine/intelligence/models.py \
+  engine/intelligence/definition.py \
+  engine/intelligence/factory.py \
+  engine/intelligence/instance.py \
+  engine/intelligence/router.py \
+  engine/intelligence/registry.py \
+  engine/intelligence/history.py \
+  engine/intelligence/capabilities/builtins.py
+
+echo "OK: Python files compiled."
+
+echo
+echo "Testing identity route..."
+
+python3 -m app.process_intelligence_request \
+  --definition config/intelligence/default.json \
+  "Who are you?" >/tmp/intelligence_doctor_response.json
+
+python3 - <<'PY'
+from pathlib import Path
+import json
+
+path = Path("/tmp/intelligence_doctor_response.json")
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+print("status:", payload.get("status"))
+print("ability:", payload.get("ability"))
+print("source:", payload.get("source"))
+print("answer:", payload.get("answer"))
+
+if payload.get("status") != "success":
+    raise SystemExit("ERROR: Intelligence Runtime did not return success.")
+
+print("OK: Intelligence Runtime returned output.")
+PY
+
+echo
+echo "Doctor check complete."

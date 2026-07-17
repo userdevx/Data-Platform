@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+HISTORY_FILE="data/intelligence/history.jsonl"
+
+if [ ! -f "$HISTORY_FILE" ]; then
+  echo "No intelligence history found."
+  exit 0
+fi
+
+tail -n 10 "$HISTORY_FILE"

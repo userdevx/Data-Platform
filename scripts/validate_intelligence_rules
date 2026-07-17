@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+ACTIVE_DEFINITION = ROOT / "config" / "intelligence" / "active.json"
+
+SCAN_PATHS = [
+    ROOT / "app",
+    ROOT / "engine",
+    ROOT / "scripts",
+    ROOT / "application" / "data-platform-app" / "src",
+    ROOT / "application" / "data-platform-app" / "src-tauri" / "src",
+]
+
+EXCLUDED_PARTS = {
+    "node_modules",
+    "dist",
+    "target",
+    "__pycache__",
+    ".git",
+}
+
+EXCLUDED_SUFFIXES = {
+    ".backup",
+    ".bak",
+    ".pyc",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".db",
+    ".sqlite",
+}
+
+BLOCKED_ROLE_LABEL = "".join(["ass", "istant"])
+
+
+def load_active_display_name() -> str:
+    if not ACTIVE_DEFINITION.exists():
+        return ""
+
+    data = json.loads(ACTIVE_DEFINITION.read_text(encoding="utf-8"))
+    identity = data.get("identity", {})
+
+    return str(
+        identity.get("display_name")
+        or identity.get("name")
+        or ""
+    ).strip()
+
+
+def should_skip(path: Path) -> bool:
+    parts = set(path.parts)
+
+    if parts & EXCLUDED_PARTS:
+        return True
+
+    if any(str(path).endswith(suffix) for suffix in EXCLUDED_SUFFIXES):
+        return True
+
+    if ".backup" in path.name:
+        return True
+
+    return False
+
+
+def iter_source_files() -> list[Path]:
+    files: list[Path] = []
+
+    for base in SCAN_PATHS:
+        if not base.exists():
+            continue
+
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+
+            if should_skip(path):
+                continue
+
+            if path.suffix.lower() not in {
+                ".py",
+                ".ts",
+                ".tsx",
+                ".rs",
+                ".json",
+                ".sh",
+            }:
+                continue
+
+            files.append(path)
+
+    return files
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit with code 1 when violations are found.",
+    )
+    args = parser.parse_args()
+
+    active_display_name = load_active_display_name()
+
+    blocked_terms = [
+        BLOCKED_ROLE_LABEL,
+        "I can help you with",
+        "Hello. I'm",
+        "Hello. I’m",
+    ]
+
+    if active_display_name:
+        blocked_terms.append(active_display_name)
+
+    violations: list[str] = []
+
+    for path in iter_source_files():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        relative = path.relative_to(ROOT)
+
+        for term in blocked_terms:
+            if not term:
+                continue
+
+            if term in text:
+                violations.append(f"{relative}: blocked hardcoded term detected: {term}")
+
+    if violations:
+        print("Rule validation found source-code violations.")
+        for violation in violations:
+            print(f"- {violation}")
+
+        return 1 if args.strict else 0
+
+    print("Rule validation passed. No blocked hardcoded terms found.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
