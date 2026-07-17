@@ -41,12 +41,12 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
   const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [output, setOutput] = useState<AgentOutput | null>(null);
   const [activityLog, setActivityLog] = useState("");
-  const [status, setStatus] = useState("Paige is ready.");
+  const [status, setStatus] = useState("Intelligence Runtime is ready.");
   const [isRunning, setIsRunning] = useState(false);
 
-  async function startPaige() {
+  async function startIntelligenceRuntime() {
     try {
-      setStatus("Starting Paige...");
+      setStatus("Starting Intelligence Runtime...");
 
       const result = await invoke<unknown>("start_agent_worker");
 
@@ -71,7 +71,7 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
       setSubmittedQuestion(cleanQuestion);
       setStatus("Sending your question...");
 
-      setStatus("Starting Paige worker...");
+      setStatus("Starting Intelligence Runtime worker...");
 
       const startResult = await invoke<unknown>("start_agent_worker");
 
@@ -168,9 +168,9 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
       <section className="agent-header">
         <div>
           <p className="agent-eyebrow">Intelligence Layer</p>
-          <h1>Paige</h1>
+          <h1>Intelligence Runtime</h1>
           <p>
-            Ask a question and Paige will return a useful answer with sources
+            Ask a question and the intelligence runtime will return a useful structured answer
             when available.
           </p>
         </div>
@@ -178,7 +178,7 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
         <div className="agent-header-actions">
           <div className="agent-status-card">
             <span className="agent-status-dot"></span>
-            Paige is available
+            Intelligence Runtime is available
           </div>
 
           <button
@@ -193,7 +193,7 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
 
       <section className="agent-grid">
         <article className="agent-panel agent-main-panel">
-          <h2>Ask Paige</h2>
+          <h2>Ask Intelligence Runtime</h2>
 
           <div className="agent-input-row">
             <input
@@ -217,8 +217,8 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
           ) : null}
 
           <div className="agent-button-row">
-            <button type="button" onClick={startPaige}>
-              Start Paige
+            <button type="button" onClick={startIntelligenceRuntime}>
+              Start Intelligence Runtime
             </button>
 
             <button type="button" onClick={readLatestOutput}>
@@ -245,7 +245,7 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
                 <strong>{output.status || "—"}</strong>
 
                 <span>Name</span>
-                <strong>Paige</strong>
+                <strong>Intelligence Runtime</strong>
 
                 <span>Time</span>
                 <strong>{output.timestamp || "—"}</strong>
@@ -301,8 +301,8 @@ function AgentPage({ onBackToWorkspace }: AgentPageProps) {
           <ol className="agent-flow">
             <li>User asks a question</li>
             <li>The question is saved</li>
-            <li>Paige reads the question</li>
-            <li>Paige searches or processes the request</li>
+            <li>Intelligence Runtime reads the question</li>
+            <li>Intelligence Runtime searches or processes the request</li>
             <li>The answer is saved</li>
             <li>The interface reads the latest answer</li>
             <li>The answer appears on screen</li>
