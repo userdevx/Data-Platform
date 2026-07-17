@@ -1,285 +1,203 @@
+from __future__ import annotations
+
 import json
 import time
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
-from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
-from engine.search.search_router import search_web
+from engine.intelligence.factory import IntelligenceFactory
+from engine.intelligence.models import IntelligenceRequest
+from engine.intelligence.validation.rule_validator import RuntimeRuleValidator
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 AGENT_DIR = PROJECT_ROOT / "engine" / "agents"
+
 INPUT_FILE = AGENT_DIR / "agent_input.json"
 OUTPUT_FILE = AGENT_DIR / "agent_output.json"
 LOG_FILE = AGENT_DIR / "agent.log"
-RECORDS_FILE = PROJECT_ROOT / "data" / "records.jsonl"
-PAIGE_NAME = "paige"
+DEFAULT_DEFINITION_FILE = PROJECT_ROOT / "config" / "intelligence" / "active.json"
 
 
-class DuckDuckGoResultParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.in_result_link = False
-        self.current_href = ""
-        self.current_text = []
-        self.results = []
-
-    def handle_starttag(self, tag, attrs):
-        attrs_dict = dict(attrs)
-        class_value = attrs_dict.get("class", "")
-
-        if tag == "a" and "result__a" in class_value:
-            self.in_result_link = True
-            self.current_href = attrs_dict.get("href", "")
-            self.current_text = []
-
-    def handle_data(self, data):
-        if self.in_result_link:
-            clean = data.strip()
-            if clean:
-                self.current_text.append(clean)
-
-    def handle_endtag(self, tag):
-        if tag == "a" and self.in_result_link:
-            title = " ".join(self.current_text).strip()
-
-            if title:
-                real_url = clean_duckduckgo_url(self.current_href)
-                domain = get_domain(real_url)
-
-                self.results.append(
-                    {
-                        "title": title,
-                        "url": real_url,
-                        "domain": domain,
-                    }
-                )
-
-            self.in_result_link = False
-            self.current_href = ""
-            self.current_text = []
-
-
-def utc_now():
+def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def log(message):
+def log(message: str) -> None:
     AGENT_DIR.mkdir(parents=True, exist_ok=True)
 
     with LOG_FILE.open("a", encoding="utf-8") as file:
         file.write(f"{utc_now()} {message}\n")
 
 
-def read_json(path):
+def read_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
 
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
+        raw = path.read_text(encoding="utf-8").strip()
 
+        if not raw:
+            return None
 
-def write_json(path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        payload = json.loads(raw)
 
-
-def append_record(payload):
-    RECORDS_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    record = {
-        "source": "paige",
-        "category": "internet_data",
-        "record_type": "search_result",
-        "input": payload.get("input"),
-        "action": payload.get("action"),
-        "result": payload.get("result"),
-        "unit": "text",
-        "timestamp": payload.get("timestamp"),
-        "agent_name": payload.get("agent_name"),
-        "status": payload.get("status"),
-    }
-
-    with RECORDS_FILE.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(record) + "\n")
-
-
-def clean_duckduckgo_url(raw_url):
-    if not raw_url:
-        return ""
-
-    decoded_url = raw_url.strip()
-
-    if decoded_url.startswith("//"):
-        decoded_url = "https:" + decoded_url
-
-    parsed = urllib.parse.urlparse(decoded_url)
-    params = urllib.parse.parse_qs(parsed.query)
-
-    real_url = params.get("uddg", [decoded_url])[0]
-    real_url = urllib.parse.unquote(real_url)
-
-    if real_url.startswith("//"):
-        real_url = "https:" + real_url
-
-    return real_url
-
-
-def get_domain(url):
-    if not url:
-        return "unknown"
-
-    parsed = urllib.parse.urlparse(url)
-
-    if parsed.netloc:
-        return parsed.netloc.replace("www.", "")
-
-    return "unknown"
-
-
-def search_duckduckgo(query, limit=5):
-    search_url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-
-    request = urllib.request.Request(
-        search_url,
-        headers={
-            "User-Agent": "Mozilla/5.0 DataPlatformPaige/1.0",
-        },
-    )
-
-    with urllib.request.urlopen(request, timeout=15) as response:
-        html = response.read().decode("utf-8", errors="replace")
-
-    parser = DuckDuckGoResultParser()
-    parser.feed(html)
-
-    return parser.results[:limit]
-
-
-def fallback_answer(query):
-    return (
-        f"Paige received your question: {query}\n\n"
-        "Live source links were not available from the current search provider. "
-        "The system is working, but the provider did not return readable result links.\n\n"
-        "Next backend improvement: connect Paige to a more reliable provider or OpenAI web search."
-    )
-
-
-def format_search_result(query, results):
-    if not results:
-        return fallback_answer(query)
-
-    first_result = results[0]
-
-    if first_result.get("answer_type") == "direct_answer":
-        return first_result.get("snippet", "Paige could not generate an answer.")
-
-    lines = [f"Top results for: {query}", ""]
-
-    for index, item in enumerate(results, start=1):
-        title = item.get("title", "Untitled result")
-        domain = item.get("domain", "unknown")
-        url = item.get("url", "")
-
-        lines.append(f"{index}. {title}")
-        lines.append(f"   Source: {domain}")
-
-        if url:
-            lines.append(f"   URL: {url}")
-
-        lines.append("")
-
-    return "\n".join(lines).strip()
-
-
-def create_error_output(user_input, action, error_message):
-    return {
-        "source": "paige",
-        "category": "internet_data",
-        "record_type": "search_result",
-        "input": user_input,
-        "action": action,
-        "result": f"Paige failed safely: {error_message}",
-        "unit": "text",
-        "timestamp": utc_now(),
-        "agent_name": PAIGE_NAME,
-        "status": "error",
-    }
-
-
-def process_task(task):
-    user_input = str(task.get("input", "")).strip()
-
-    if not user_input:
-        return create_error_output(
-            user_input,
-            "Validate question",
-            "No question was provided.",
-        )
-
-    action = f"Search for: {user_input}"
-
-    try:
-        results = search_web(user_input, limit=5)
-        result_text = format_search_result(user_input, results)
+        if isinstance(payload, dict):
+            return payload
 
         return {
-            "source": "paige",
-            "category": "internet_data",
-            "record_type": "search_result",
-            "input": user_input,
-            "action": action,
-            "result": result_text,
-            "unit": "text",
-            "timestamp": utc_now(),
-            "agent_name": PAIGE_NAME,
-            "status": "complete",
+            "question": str(payload),
         }
 
     except Exception as error:
-        return create_error_output(user_input, action, str(error))
+        return {
+            "question": "",
+            "error": f"Could not read input JSON: {error}",
+        }
 
 
-def mark_task_complete(task):
-    task["status"] = "complete"
-    task["completed_at"] = utc_now()
-    write_json(INPUT_FILE, task)
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path.write_text(
+        json.dumps(payload, indent=2),
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
 
 
-def main():
-    AGENT_DIR.mkdir(parents=True, exist_ok=True)
-    log("Paige started.")
+def normalize_question(payload: dict[str, Any] | None) -> str:
+    if not payload:
+        return ""
 
-    last_processed_input = ""
+    for key in ("question", "input", "prompt", "query", "text"):
+        value = payload.get(key)
+
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return ""
+
+
+def resolve_definition_path(payload: dict[str, Any] | None) -> Path:
+    if payload:
+        raw_path = payload.get("definition_path")
+
+        if isinstance(raw_path, str) and raw_path.strip():
+            candidate = Path(raw_path.strip())
+
+            if not candidate.is_absolute():
+                candidate = PROJECT_ROOT / candidate
+
+            return candidate
+
+    return DEFAULT_DEFINITION_FILE
+
+
+def build_error_response(
+    *,
+    message: str,
+    source: str = "intelligence_worker",
+    details: str | None = None,
+) -> dict[str, Any]:
+    errors = []
+
+    if details:
+        errors.append(details)
+
+    return {
+        "status": "error",
+        "answer": message,
+        "source": source,
+        "capability": "worker_error",
+        "ability": "worker_error",
+        "created_at": utc_now(),
+        "data": {
+            "action": "Worker request failed.",
+            "explanation": "The request reached the generic intelligence worker but could not be completed.",
+            "next_step": "Review the worker input, runtime configuration, and validation output.",
+        },
+        "errors": errors,
+    }
+
+
+def process_once() -> dict[str, Any]:
+    payload = read_json(INPUT_FILE)
+
+    if payload and payload.get("error"):
+        return build_error_response(
+            message="The worker could not read the request input.",
+            details=str(payload.get("error")),
+        )
+
+    question = normalize_question(payload)
+
+    if not question:
+        return build_error_response(
+            message="Enter a question before submitting to the Intelligence Runtime.",
+        )
+
+    definition_path = resolve_definition_path(payload)
+
+    if not definition_path.exists():
+        return build_error_response(
+            message="The active intelligence definition could not be found.",
+            details=str(definition_path),
+        )
+
+    definition = json.loads(definition_path.read_text(encoding="utf-8"))
+
+    factory = IntelligenceFactory(root=PROJECT_ROOT)
+    instance = factory.create(definition_path=definition_path)
+
+    request = IntelligenceRequest.create(
+        question=question,
+        source="agent_worker",
+    )
+
+    response = instance.process(request)
+    response_payload = response.to_dict()
+
+    validator = RuntimeRuleValidator()
+    validated_payload = validator.enforce_response(response_payload, definition)
+
+    return validated_payload
+
+
+def run_forever(poll_seconds: float = 1.0) -> None:
+    log("Generic intelligence worker started.")
+
+    last_seen_input = ""
 
     while True:
-        task = read_json(INPUT_FILE)
+        try:
+            current_input = INPUT_FILE.read_text(encoding="utf-8") if INPUT_FILE.exists() else ""
 
-        if not task:
-            time.sleep(1)
-            continue
+            if current_input and current_input != last_seen_input:
+                last_seen_input = current_input
 
-        task_input = str(task.get("input", "")).strip()
-        task_status = task.get("status")
+                result = process_once()
+                write_json(OUTPUT_FILE, result)
 
-        if task_status == "new" and task_input and task_input != last_processed_input:
-            log(f"Processing question: {task_input}")
+                status = result.get("status", "unknown")
+                log(f"Request processed with status={status}.")
 
-            output = process_task(task)
+        except KeyboardInterrupt:
+            log("Generic intelligence worker stopped.")
+            raise
 
-            write_json(OUTPUT_FILE, output)
-            append_record(output)
-            mark_task_complete(task)
+        except Exception as error:
+            result = build_error_response(
+                message="The Intelligence Runtime failed safely.",
+                details=str(error),
+            )
+            write_json(OUTPUT_FILE, result)
+            log(f"Worker error: {error}")
 
-            last_processed_input = task_input
-            log(f"Answer saved: {task_input}")
-
-        time.sleep(1)
+        time.sleep(poll_seconds)
 
 
 if __name__ == "__main__":
-    main()
+    run_forever()
