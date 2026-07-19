@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from engine.intelligence.memory_runtime import (
+    is_explicit_memory_command,
+)
 from engine.intelligence.models import IntelligenceRequest
 
 
@@ -91,28 +94,7 @@ class IntelligenceRouter:
         )
 
     def _memory_command(self, text: str) -> bool:
-        memory_phrases = [
-            "remember that",
-            "remember this",
-            "save this",
-            "store this",
-            "add this to memory",
-            "from now on",
-            "going forward",
-            "forget that",
-            "forget this",
-            "remove this memory",
-            "delete this memory",
-            "do not remember",
-            "what do you remember",
-            "list memory",
-            "list memories",
-            "memory status",
-            "show memory",
-            "show memories",
-        ]
-
-        return any(phrase in text for phrase in memory_phrases)
+        return is_explicit_memory_command(text)
 
     def _datetime(self, text: str) -> bool:
         phrases = [

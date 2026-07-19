@@ -6,6 +6,10 @@ from engine.memory.models import MemoryCandidate, MemoryKind, MemoryOperation
 
 
 class RuleBasedMemoryExtractor:
+    """Extract supported long-term memory candidates from user messages."""
+
+    _LANGUAGE_TOKEN = r"[A-Za-z][A-Za-z0-9+#.-]*"
+
     def extract(
         self,
         *,
@@ -33,14 +37,14 @@ class RuleBasedMemoryExtractor:
                 text=cleaned,
             )
 
-            if forget_candidate:
+            if forget_candidate is not None:
                 candidates.append(forget_candidate)
 
             return candidates
 
         language = self._extract_language_preference(cleaned)
 
-        if language:
+        if language is not None:
             candidates.append(
                 MemoryCandidate(
                     user_id=user_id,
@@ -50,7 +54,9 @@ class RuleBasedMemoryExtractor:
                     subject="user",
                     predicate="preferred_implementation_language",
                     value=language,
-                    canonical_text=f"The user prefers {language} implementations.",
+                    canonical_text=(
+                        f"The user prefers {language} for implementation examples."
+                    ),
                     confidence=0.98,
                     importance=0.90,
                     source_conversation_id=conversation_id,
@@ -62,7 +68,7 @@ class RuleBasedMemoryExtractor:
 
         project_rule = self._extract_project_rule(cleaned)
 
-        if project_rule:
+        if project_rule is not None:
             candidates.append(
                 MemoryCandidate(
                     user_id=user_id,
@@ -89,8 +95,11 @@ class RuleBasedMemoryExtractor:
         phrases = (
             "remember that",
             "remember this",
+            "remember my preference",
             "save this",
+            "save my preference",
             "store this",
+            "store my preference",
             "add this to memory",
             "from now on",
             "going forward",
@@ -103,6 +112,7 @@ class RuleBasedMemoryExtractor:
         phrases = (
             "forget that",
             "forget this",
+            "forget my preference",
             "remove this memory",
             "delete this memory",
             "do not remember",
@@ -110,21 +120,48 @@ class RuleBasedMemoryExtractor:
 
         return any(phrase in text for phrase in phrases)
 
-    @staticmethod
-    def _extract_language_preference(text: str) -> str | None:
+    @classmethod
+    def _extract_language_preference(cls, text: str) -> str | None:
+        token = cls._LANGUAGE_TOKEN
+
         patterns = (
-            r"\bI prefer ([A-Za-z0-9+#.-]+)\b",
-            r"\buse ([A-Za-z0-9+#.-]+) for implementation\b",
-            r"\bimplement(?:ation)?s? (?:must|should) use ([A-Za-z0-9+#.-]+)\b",
+            rf"\bI prefer\s+({token})\b",
+            rf"\bmy preference is\s+({token})\b",
+            rf"\bpreferred implementation language is\s+({token})\b",
+            rf"\buse\s+({token})\s+for implementation(?:s|\s+examples)?\b",
+            rf"\bimplementation(?:s|\s+examples)?\s+"
+            rf"(?:must|should)\s+use\s+({token})\b",
+            rf"\bimplementation examples\s+"
+            rf"(?:must|should)\s+(?:be written in|use)\s+({token})\b",
+            rf"\bcode examples\s+"
+            rf"(?:must|should)\s+(?:be written in|use)\s+({token})\b",
+            rf"\bexamples\s+(?:must|should)\s+use\s+({token})\b",
         )
 
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
 
-            if match:
-                return match.group(1)
+            if match is not None:
+                return cls._normalize_language(match.group(1))
 
         return None
+
+    @staticmethod
+    def _normalize_language(language: str) -> str:
+        aliases = {
+            "python": "Python",
+            "javascript": "JavaScript",
+            "typescript": "TypeScript",
+            "rust": "Rust",
+            "java": "Java",
+            "c++": "C++",
+            "c#": "C#",
+            "go": "Go",
+            "golang": "Go",
+        }
+
+        cleaned = language.strip()
+        return aliases.get(cleaned.lower(), cleaned)
 
     @staticmethod
     def _extract_project_rule(text: str) -> str | None:
@@ -158,12 +195,22 @@ class RuleBasedMemoryExtractor:
     ) -> MemoryCandidate | None:
         lowered = text.lower()
 
-        if "preferred implementation language" in lowered:
+        language_signals = (
+            "preferred implementation language",
+            "implementation language",
+            "python preference",
+            "coding language preference",
+            "implementation preference",
+        )
+
+        if any(signal in lowered for signal in language_signals):
             predicate = "preferred_implementation_language"
             namespace = "implementation_preferences"
+            subject = "user"
         elif "project rule" in lowered:
             predicate = "project_rule"
             namespace = "project_rules"
+            subject = "active_project"
         else:
             return None
 
@@ -172,7 +219,7 @@ class RuleBasedMemoryExtractor:
             intelligence_id=intelligence_id,
             namespace=namespace,
             kind=MemoryKind.PROCEDURAL,
-            subject="user",
+            subject=subject,
             predicate=predicate,
             value=None,
             canonical_text=text,

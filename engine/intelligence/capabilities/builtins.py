@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 import json
 import re
@@ -325,6 +327,55 @@ class MemoryCommandCapability:
                 "errors": [],
             }
 
+        if mode == "lookup":
+            selected_memory = result.get("memory")
+            value = result.get("value")
+            predicate = result.get("predicate")
+
+            if selected_memory and value is not None:
+                answer = str(value)
+                status = "success"
+                errors = []
+                action = "Retrieved matching memory."
+                explanation = (
+                    "The answer was retrieved directly from "
+                    "the Data Engine memory store."
+                )
+                next_step = (
+                    "Use the stored preference in the current request."
+                )
+            else:
+                answer = (
+                    "I do not have a saved preference for that yet."
+                )
+                status = "not_found"
+                errors = []
+                action = "No matching memory found."
+                explanation = (
+                    "The Data Engine did not contain an active "
+                    "memory matching the requested preference."
+                )
+                next_step = (
+                    "Save the preference and ask the question again."
+                )
+
+            return {
+                "capability": self.name,
+                "source": "data_engine_memory",
+                "status": status,
+                "answer": answer,
+                "data": {
+                    "action": action,
+                    "explanation": explanation,
+                    "next_step": next_step,
+                    "predicate": predicate,
+                    "memory": selected_memory,
+                    "memory_count": len(memories),
+                    "model_provider_used": False,
+                },
+                "errors": errors,
+            }
+
         if deleted > 0:
             answer = "Got it — I removed that memory."
         elif created > 0:
@@ -512,8 +563,13 @@ class ModelReasoningCapability:
             }
         ).encode("utf-8")
 
+        ollama_base_url = os.getenv(
+            "OLLAMA_BASE_URL",
+            "http://127.0.0.1:11434",
+        ).rstrip("/")
+
         request = Request(
-            "http://127.0.0.1:11434/api/generate",
+            f"{ollama_base_url}/api/generate",
             data=payload,
             headers={
                 "Content-Type": "application/json",

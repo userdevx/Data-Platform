@@ -1,0 +1,57 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV DATA_PLATFORM_CONTAINER=1
+ENV PATH="/app/scripts:${PATH}"
+
+WORKDIR /app
+
+RUN groupadd \
+        --system \
+        --gid 10001 \
+        intelligence \
+    && useradd \
+        --system \
+        --uid 10001 \
+        --gid 10001 \
+        --create-home \
+        --home-dir /home/intelligence \
+        --shell /usr/sbin/nologin \
+        intelligence
+
+COPY sandbox/requirements-intelligence.txt /tmp/requirements-intelligence.txt
+
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install \
+        --no-cache-dir \
+        -r /tmp/requirements-intelligence.txt \
+    && rm /tmp/requirements-intelligence.txt
+
+COPY app /app/app
+COPY engine /app/engine
+COPY config /app/config
+COPY scripts /app/scripts
+COPY tests /app/tests
+
+RUN mkdir -p \
+        /app/data \
+        /app/data/intelligence \
+        /app/data/security \
+        /app/data/backups/intelligence_code_edits \
+        /app/data/indexes \
+    && chmod +x /app/scripts/intelligence \
+    && chmod +x /app/scripts/intelligence-doctor \
+    && chmod +x /app/scripts/intelligence-history \
+    && chmod +x /app/scripts/intelligence-text \
+    && chmod +x /app/scripts/validate_intelligence_rules \
+    && chown -R 10001:10001 \
+        /app \
+        /home/intelligence
+
+USER 10001:10001
+
+ENTRYPOINT ["python", "-m", "app.process_intelligence_request"]
+
+CMD ["--definition", "config/intelligence/active.json", "who are you?"]

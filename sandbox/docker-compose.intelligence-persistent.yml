@@ -1,0 +1,30 @@
+services:
+  intelligence-runtime:
+    build:
+      context: ..
+      dockerfile: sandbox/Dockerfile.intelligence
+
+    image: data-platform-intelligence-runtime:latest
+
+    read_only: true
+
+    network_mode: "none"
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+
+    volumes:
+      - intelligence-data:/app/data
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=1770
+
+volumes:
+  intelligence-data:

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from engine.security.intelligence_action_request import IntelligenceActionRequest
-from engine.security.intelligence_execution_manifest import PAIGE_EXECUTION_MANIFEST
+from engine.security.intelligence_execution_manifest import INTELLIGENCE_EXECUTION_MANIFEST
 
 
 class IntelligenceSecurityError(Exception):
@@ -35,19 +35,19 @@ def validate_tool_exists(tool_name: str) -> None:
     if not tool_name.strip():
         raise IntelligenceValidationError("Tool name cannot be empty.")
 
-    if tool_name not in PAIGE_EXECUTION_MANIFEST:
+    if tool_name not in INTELLIGENCE_EXECUTION_MANIFEST:
         raise IntelligenceSecurityError(f"Tool is not registered: {tool_name}")
 
 
 def validate_tool_enabled(tool_name: str) -> None:
-    rule = PAIGE_EXECUTION_MANIFEST[tool_name]
+    rule = INTELLIGENCE_EXECUTION_MANIFEST[tool_name]
 
     if rule.get("enabled") is not True:
         raise IntelligenceSecurityError(f"Tool is disabled: {tool_name}")
 
 
 def validate_tool_risk(tool_name: str) -> None:
-    rule = PAIGE_EXECUTION_MANIFEST[tool_name]
+    rule = INTELLIGENCE_EXECUTION_MANIFEST[tool_name]
 
     if rule.get("risk") == "critical":
         raise IntelligenceSecurityError(f"Critical-risk tool is blocked: {tool_name}")
@@ -57,7 +57,7 @@ def validate_params(tool_name: str, params: dict[str, Any]) -> None:
     if not isinstance(params, dict):
         raise IntelligenceValidationError("Params must be a dictionary.")
 
-    rule = PAIGE_EXECUTION_MANIFEST[tool_name]
+    rule = INTELLIGENCE_EXECUTION_MANIFEST[tool_name]
     schema = rule.get("allowed_params", {})
 
     incoming_keys = set(params.keys())
@@ -139,7 +139,7 @@ def validate_file_boundaries(tool_name: str, params: dict[str, Any]) -> None:
     if tool_name != "files.read_approved":
         return
 
-    rule = PAIGE_EXECUTION_MANIFEST[tool_name]
+    rule = INTELLIGENCE_EXECUTION_MANIFEST[tool_name]
     path_value = params.get("path")
 
     if not isinstance(path_value, str):
@@ -167,7 +167,7 @@ def validate_network_boundaries(tool_name: str, params: dict[str, Any]) -> None:
     if tool_name != "network.call_approved_api":
         return
 
-    rule = PAIGE_EXECUTION_MANIFEST[tool_name]
+    rule = INTELLIGENCE_EXECUTION_MANIFEST[tool_name]
     domain = params.get("domain")
 
     if not isinstance(domain, str):

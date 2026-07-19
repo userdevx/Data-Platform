@@ -76,6 +76,76 @@ def is_memory_enabled(definition: Any) -> bool:
     return True
 
 
+def get_memory_lookup_predicate(text: str) -> str | None:
+    normalized = " ".join(text.lower().strip().split())
+
+    implementation_language_patterns = [
+        "which language should implementation examples use",
+        "what language should implementation examples use",
+        "which language should code examples use",
+        "what language should code examples use",
+        "what is my preferred implementation language",
+        "which implementation language do i prefer",
+        "what implementation language do i prefer",
+        "which language do i prefer for implementation examples",
+        "what language do i prefer for implementation examples",
+        "which language do i prefer for code examples",
+        "what language do i prefer for code examples",
+    ]
+
+    if any(
+        pattern in normalized
+        for pattern in implementation_language_patterns
+    ):
+        return "preferred_implementation_language"
+
+    has_language_term = any(
+        term in normalized
+        for term in [
+            "language",
+            "implementation language",
+            "coding language",
+        ]
+    )
+
+    has_example_term = any(
+        term in normalized
+        for term in [
+            "implementation example",
+            "implementation examples",
+            "code example",
+            "code examples",
+            "coding example",
+            "coding examples",
+        ]
+    )
+
+    has_question_term = any(
+        term in normalized
+        for term in [
+            "which",
+            "what",
+            "prefer",
+            "preferred",
+            "should use",
+            "do i use",
+        ]
+    )
+
+    if (
+        has_language_term
+        and has_example_term
+        and has_question_term
+    ):
+        return "preferred_implementation_language"
+
+    return None
+
+
+def is_memory_lookup_query(text: str) -> bool:
+    return get_memory_lookup_predicate(text) is not None
+
+
 def is_explicit_memory_command(text: str) -> bool:
     normalized = text.lower().strip()
 
@@ -100,7 +170,10 @@ def is_explicit_memory_command(text: str) -> bool:
         "show memories",
     ]
 
-    return any(phrase in normalized for phrase in phrases)
+    return (
+        any(phrase in normalized for phrase in phrases)
+        or is_memory_lookup_query(normalized)
+    )
 
 
 def store_memory_candidates_from_definition(
@@ -212,6 +285,45 @@ def process_memory_command_from_definition(
     source: str,
 ) -> dict[str, Any]:
     normalized = user_text.lower().strip()
+
+    lookup_predicate = get_memory_lookup_predicate(user_text)
+
+    if lookup_predicate:
+        memories = list_memory_records_from_definition(
+            root=root,
+            definition=definition,
+        )
+
+        matches = [
+            memory
+            for memory in memories
+            if memory.get("predicate") == lookup_predicate
+            and memory.get("status") == "active"
+        ]
+
+        matches.sort(
+            key=lambda memory: str(
+                memory.get("updated_at", "")
+            ),
+            reverse=True,
+        )
+
+        selected = matches[0] if matches else None
+
+        return {
+            "mode": "lookup",
+            "created": 0,
+            "deleted": 0,
+            "rejected": [],
+            "memories": matches,
+            "memory": selected,
+            "predicate": lookup_predicate,
+            "value": (
+                selected.get("value")
+                if selected
+                else None
+            ),
+        }
 
     if any(
         phrase in normalized
