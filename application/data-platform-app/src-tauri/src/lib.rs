@@ -81,20 +81,6 @@ fn timestamp() -> Result<u64, String> {
         .as_secs())
 }
 
-fn app_root() -> Result<PathBuf, String> {
-    let current = std::env::current_dir()
-        .map_err(|error| format!("Unable to read current directory: {}", error))?;
-
-    if current.ends_with("src-tauri") {
-        return current
-            .parent()
-            .map(|path| path.to_path_buf())
-            .ok_or("Unable to locate application root.".to_string());
-    }
-
-    Ok(current)
-}
-
 fn find_data_platform_root() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
@@ -129,7 +115,7 @@ fn find_data_platform_root() -> Result<PathBuf, String> {
 }
 
 fn data_dir() -> Result<PathBuf, String> {
-    let path = app_root()?.join("data");
+    let path = find_data_platform_root()?.join("data");
 
     for folder in [
         "",
@@ -149,7 +135,7 @@ fn data_dir() -> Result<PathBuf, String> {
 }
 
 fn logs_dir() -> Result<PathBuf, String> {
-    let path = app_root()?.join("logs");
+    let path = find_data_platform_root()?.join("data").join("logs");
     fs::create_dir_all(&path).map_err(|error| format!("Unable to create logs folder: {}", error))?;
     Ok(path)
 }
