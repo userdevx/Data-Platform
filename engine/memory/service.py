@@ -138,6 +138,32 @@ class MemoryService:
 
         return stored
 
+    def get_active_memory(
+        self,
+        *,
+        user_id: str,
+        intelligence_id: str,
+        predicate: str,
+        subject: str = "user",
+        namespace: str | None = None,
+        record_access: bool = True,
+    ) -> MemoryRecord | None:
+        memory = self._repository.get_active_memory(
+            user_id=user_id,
+            intelligence_id=intelligence_id,
+            predicate=predicate,
+            subject=subject,
+            namespace=namespace,
+        )
+
+        if memory is None:
+            return None
+
+        if record_access:
+            return self._repository.record_access(memory)
+
+        return memory
+
     def retrieve(
         self,
         *,

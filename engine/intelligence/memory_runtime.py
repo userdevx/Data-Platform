@@ -8,7 +8,11 @@ from uuid import uuid4
 from engine.data_engine.facade import DataEngineFacade
 from engine.memory.context_builder import MemoryContextBuilder
 from engine.memory.extraction import RuleBasedMemoryExtractor
-from engine.memory.models import MemoryOperation
+from engine.memory.models import MemoryOperation, MemoryRecord
+from engine.memory.predicate_routes import (
+    PredicateRoute,
+    match_predicate_route,
+)
 from engine.memory.repository import MemoryRepository
 from engine.memory.retrieval import MemoryRetriever
 from engine.memory.service import MemoryRejectedError, MemoryService
@@ -76,74 +80,74 @@ def is_memory_enabled(definition: Any) -> bool:
     return True
 
 
-def get_memory_lookup_predicate(text: str) -> str | None:
-    normalized = " ".join(text.lower().strip().split())
+def get_memory_lookup_route(
+    text: str,
+    *,
+    root: Path | None = None,
+) -> PredicateRoute | None:
+    runtime_root = root or Path.cwd()
 
-    implementation_language_patterns = [
-        "which language should implementation examples use",
-        "what language should implementation examples use",
-        "which language should code examples use",
-        "what language should code examples use",
-        "what is my preferred implementation language",
-        "which implementation language do i prefer",
-        "what implementation language do i prefer",
-        "which language do i prefer for implementation examples",
-        "what language do i prefer for implementation examples",
-        "which language do i prefer for code examples",
-        "what language do i prefer for code examples",
-    ]
-
-    if any(
-        pattern in normalized
-        for pattern in implementation_language_patterns
-    ):
-        return "preferred_implementation_language"
-
-    has_language_term = any(
-        term in normalized
-        for term in [
-            "language",
-            "implementation language",
-            "coding language",
-        ]
+    return match_predicate_route(
+        root=runtime_root,
+        text=text,
     )
 
-    has_example_term = any(
-        term in normalized
-        for term in [
-            "implementation example",
-            "implementation examples",
-            "code example",
-            "code examples",
-            "coding example",
-            "coding examples",
-        ]
+
+def get_memory_lookup_predicate(
+    text: str,
+    *,
+    root: Path | None = None,
+) -> str | None:
+    route = get_memory_lookup_route(
+        text,
+        root=root,
     )
 
-    has_question_term = any(
-        term in normalized
-        for term in [
-            "which",
-            "what",
-            "prefer",
-            "preferred",
-            "should use",
-            "do i use",
-        ]
-    )
+    if route is None:
+        return None
 
-    if (
-        has_language_term
-        and has_example_term
-        and has_question_term
-    ):
-        return "preferred_implementation_language"
-
-    return None
+    return route.predicate
 
 
-def is_memory_lookup_query(text: str) -> bool:
-    return get_memory_lookup_predicate(text) is not None
+def is_memory_lookup_query(
+    text: str,
+    *,
+    root: Path | None = None,
+) -> bool:
+    return get_memory_lookup_route(
+        text,
+        root=root,
+    ) is not None
+
+
+def serialize_memory_record(
+    memory: MemoryRecord,
+) -> dict[str, Any]:
+    return {
+        "memory_id": str(memory.memory_id),
+        "namespace": memory.namespace,
+        "kind": memory.kind.value,
+        "subject": memory.subject,
+        "predicate": memory.predicate,
+        "value": memory.value,
+        "canonical_text": memory.canonical_text,
+        "confidence": memory.confidence,
+        "importance": memory.importance,
+        "status": memory.status.value,
+        "supersedes_memory_id": (
+            str(memory.supersedes_memory_id)
+            if memory.supersedes_memory_id
+            else None
+        ),
+        "created_at": memory.created_at.isoformat(),
+        "updated_at": memory.updated_at.isoformat(),
+        "last_accessed_at": (
+            memory.last_accessed_at.isoformat()
+            if memory.last_accessed_at
+            else None
+        ),
+        "access_count": memory.access_count,
+    }
 
 
 def is_explicit_memory_command(text: str) -> bool:
@@ -172,7 +176,10 @@ def is_explicit_memory_command(text: str) -> bool:
 
     return (
         any(phrase in normalized for phrase in phrases)
-        or is_memory_lookup_query(normalized)
+        or is_memory_lookup_query(
+            normalized,
+            root=Path.cwd(),
+        )
     )
 
 
@@ -286,43 +293,50 @@ def process_memory_command_from_definition(
 ) -> dict[str, Any]:
     normalized = user_text.lower().strip()
 
-    lookup_predicate = get_memory_lookup_predicate(user_text)
+    lookup_route = get_memory_lookup_route(
+        user_text,
+        root=root,
+    )
 
-    if lookup_predicate:
-        memories = list_memory_records_from_definition(
-            root=root,
-            definition=definition,
+    if lookup_route is not None:
+        service = build_memory_service(root)
+
+        memory = service.get_active_memory(
+            user_id=get_user_id(),
+            intelligence_id=get_intelligence_id(definition),
+            predicate=lookup_route.predicate,
+            subject=lookup_route.subject,
+            namespace=lookup_route.namespace,
         )
 
-        matches = [
-            memory
-            for memory in memories
-            if memory.get("predicate") == lookup_predicate
-            and memory.get("status") == "active"
-        ]
-
-        matches.sort(
-            key=lambda memory: str(
-                memory.get("updated_at", "")
-            ),
-            reverse=True,
+        serialized_memory = (
+            serialize_memory_record(memory)
+            if memory is not None
+            else None
         )
 
-        selected = matches[0] if matches else None
+        if memory is None:
+            value = None
+        elif lookup_route.answer_mode == "canonical_text":
+            value = memory.canonical_text
+        else:
+            value = memory.value
 
         return {
             "mode": "lookup",
             "created": 0,
             "deleted": 0,
             "rejected": [],
-            "memories": matches,
-            "memory": selected,
-            "predicate": lookup_predicate,
-            "value": (
-                selected.get("value")
-                if selected
-                else None
+            "memories": (
+                [serialized_memory]
+                if serialized_memory is not None
+                else []
             ),
+            "memory": serialized_memory,
+            "predicate": lookup_route.predicate,
+            "namespace": lookup_route.namespace,
+            "subject": lookup_route.subject,
+            "value": value,
         }
 
     if any(

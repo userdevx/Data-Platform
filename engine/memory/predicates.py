@@ -40,6 +40,12 @@ PREDICATE_REGISTRY: dict[str, PredicateDefinition] = {
         temporal_mode=TemporalMode.STABLE,
         render_template="The user prefers this response style: {value}.",
     ),
+    "preferred_display_name": PredicateDefinition(
+        name="preferred_display_name",
+        cardinality=PredicateCardinality.ONE,
+        temporal_mode=TemporalMode.STABLE,
+        render_template="The user prefers this display name: {value}.",
+    ),
     "preferred_terminology": PredicateDefinition(
         name="preferred_terminology",
         cardinality=PredicateCardinality.MANY,
@@ -56,13 +62,17 @@ PREDICATE_REGISTRY: dict[str, PredicateDefinition] = {
         name="prefers_architecture",
         cardinality=PredicateCardinality.MANY,
         temporal_mode=TemporalMode.STABLE,
-        render_template="The user prefers this architecture principle: {value}.",
+        render_template=(
+            "The user prefers this architecture principle: {value}."
+        ),
     ),
     "active_project": PredicateDefinition(
         name="active_project",
         cardinality=PredicateCardinality.MANY,
         temporal_mode=TemporalMode.TIME_BOUND,
-        render_template="The user is working on this active project: {value}.",
+        render_template=(
+            "The user is working on this active project: {value}."
+        ),
     ),
     "current_location": PredicateDefinition(
         name="current_location",
@@ -86,7 +96,9 @@ PREDICATE_REGISTRY: dict[str, PredicateDefinition] = {
         cardinality=PredicateCardinality.MANY,
         temporal_mode=TemporalMode.TIME_BOUND,
         default_ttl_seconds=2_592_000,
-        render_template="The system learned this from a public source: {value}.",
+        render_template=(
+            "The system learned this from a public source: {value}."
+        ),
     ),
     "known_public_profile": PredicateDefinition(
         name="known_public_profile",
@@ -98,5 +110,7 @@ PREDICATE_REGISTRY: dict[str, PredicateDefinition] = {
 }
 
 
-def get_predicate_definition(predicate: str) -> PredicateDefinition | None:
+def get_predicate_definition(
+    predicate: str,
+) -> PredicateDefinition | None:
     return PREDICATE_REGISTRY.get(predicate)

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "routes": {
+    "preferred_implementation_language": {
+      "namespace": "implementation_preferences",
+      "subject": "user",
+      "answer_mode": "value",
+      "patterns": [
+        "which language should implementation examples use",
+        "what language should implementation examples use",
+        "which language should code examples use",
+        "what language should code examples use",
+        "what is my preferred implementation language",
+        "which implementation language do i prefer",
+        "what implementation language do i prefer",
+        "which language do i prefer for implementation examples",
+        "what language do i prefer for implementation examples",
+        "which language do i prefer for code examples",
+        "what language do i prefer for code examples"
+      ]
+    },
+    "preferred_response_style": {
+      "namespace": "interaction_preferences",
+      "subject": "user",
+      "answer_mode": "value",
+      "patterns": [
+        "what response style do i prefer",
+        "which response style do i prefer",
+        "how should responses be formatted",
+        "how should you format responses",
+        "what is my preferred answer format",
+        "what answer format do i prefer",
+        "how do i prefer answers to be formatted"
+      ]
+    },
+    "preferred_display_name": {
+      "namespace": "identity_preferences",
+      "subject": "user",
+      "answer_mode": "value",
+      "patterns": [
+        "what display name do i prefer",
+        "what is my preferred display name",
+        "which display name should be used",
+        "what name should be displayed"
+      ]
+    }
+  }
+}
