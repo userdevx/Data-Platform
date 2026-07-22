@@ -1,18 +1,17 @@
-import os
-import shutil
+import json
+from pathlib import Path
 
 from engine.storage.loader import StorageBackendLoader
 
 
-def test_engine_storage_abstraction():
-    test_dir = "./test_warehouse"
-
-    if os.path.exists(test_dir):
-        shutil.rmtree(test_dir)
+def test_engine_storage_abstraction(
+    tmp_path: Path,
+) -> None:
+    test_dir = tmp_path / "test_warehouse"
 
     backend = StorageBackendLoader.configure(
         backend_type="local_json",
-        base_dir=test_dir,
+        base_dir=str(test_dir),
     )
 
     namespace = "analytics.user_clicks"
@@ -20,34 +19,54 @@ def test_engine_storage_abstraction():
     version = "1"
 
     records = [
-        {"click_id": "c1", "user_id": 42},
-        {"click_id": "c2", "user_id": 99},
+        {
+            "click_id": "c1",
+            "user_id": 42,
+        },
+        {
+            "click_id": "c2",
+            "user_id": 99,
+        },
     ]
 
-    backend.write_records(
+    result = backend.write_records(
         namespace=namespace,
         partition=partition,
         version=version,
         records=records,
     )
 
-    expected_path = os.path.join(
-        test_dir,
-        "analytics",
-        "user_clicks",
-        "partition=2026-05-14",
-        "data_v1.json",
+    assert result is None
+
+    expected_file = (
+        test_dir
+        / "analytics"
+        / "user_clicks"
+        / f"partition={partition}"
+        / f"data_v{version}.json"
     )
 
-    assert os.path.exists(expected_path)
+    assert expected_file.is_file()
 
-    retrieved_records = backend.read_records(
+    stored_records = backend.read_records(
         namespace=namespace,
         partition=partition,
         version=version,
     )
 
-    assert len(retrieved_records) == 2
-    assert retrieved_records[0]["user_id"] == 42
+    assert stored_records == records
 
-    shutil.rmtree(test_dir)
+    envelope = json.loads(
+        expected_file.read_text(encoding="utf-8")
+    )
+
+    assert envelope["metadata"]["schema_version"] == version
+    assert envelope["metadata"]["format"] == "JSON"
+    assert envelope["metadata"]["namespace"] == namespace
+    assert envelope["metadata"]["partition"] == partition
+    assert envelope["metadata"]["record_count"] == len(records)
+    assert envelope["records"] == records
+
+    temporary_file = Path(f"{expected_file}.tmp")
+
+    assert not temporary_file.exists()

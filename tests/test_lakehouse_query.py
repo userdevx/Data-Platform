@@ -1,17 +1,17 @@
-import os
-import shutil
+from pathlib import Path
 
 from engine.lakehouse_query import query_lakehouse_partition
 from engine.storage.jsonl_backend import LocalJsonlAppendBackend
 
 
-def test_query_lakehouse_partition_filters_records():
-    test_dir = "./test_query_lakehouse"
+def test_query_lakehouse_partition_filters_records(
+    tmp_path: Path,
+) -> None:
+    test_dir = tmp_path / "test_query_lakehouse"
 
-    if os.path.exists(test_dir):
-        shutil.rmtree(test_dir)
-
-    backend = LocalJsonlAppendBackend(base_dir=test_dir)
+    backend = LocalJsonlAppendBackend(
+        base_dir=str(test_dir),
+    )
 
     records = [
         {
@@ -42,11 +42,17 @@ def test_query_lakehouse_partition_filters_records():
         namespace="motion_events",
         partition="2026-05-15",
         sensor_type="pir_motion_sensor",
-        base_dir=test_dir,
+        base_dir=str(test_dir),
     )
 
     assert result["records_scanned"] == 2
     assert result["records_returned"] == 1
-    assert result["data"][0]["sensor_type"] == "pir_motion_sensor"
+    assert len(result["data"]) == 1
 
-    shutil.rmtree(test_dir)
+    returned_record = result["data"][0]
+
+    assert returned_record["source"] == "edge_device"
+    assert returned_record["category"] == "motion"
+    assert returned_record["sensor_type"] == "pir_motion_sensor"
+    assert returned_record["value"] is True
+    assert returned_record["unit"] == "boolean"

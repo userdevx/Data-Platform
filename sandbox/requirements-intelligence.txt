@@ -1,4 +1,6 @@
-psutil
-requests
 beautifulsoup4
+psutil
 pytest
+pyyaml
+requests
+pyarrow==24.0.0
