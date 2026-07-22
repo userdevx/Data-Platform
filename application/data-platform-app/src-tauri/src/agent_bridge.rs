@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-static PAIGE_STARTED: Mutex<bool> = Mutex::new(false);
+static WORKER_STARTED: Mutex<bool> = Mutex::new(false);
 
 #[derive(Serialize)]
 pub struct AgentTaskResult {
@@ -76,7 +76,7 @@ fn python_path(root: &PathBuf) -> PathBuf {
 
 #[tauri::command]
 pub fn start_agent_worker() -> Result<AgentTaskResult, String> {
-    let mut started = PAIGE_STARTED.lock().map_err(|error| error.to_string())?;
+    let mut started = WORKER_STARTED.lock().map_err(|error| error.to_string())?;
 
     if *started {
         return Ok(AgentTaskResult {
