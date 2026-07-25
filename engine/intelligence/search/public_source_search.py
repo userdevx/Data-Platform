@@ -12,7 +12,6 @@ import urllib.request
 class PublicSearchResult:
     title: str
     url: str
-    snippet: str
     source: str
     score: int
 
@@ -26,11 +25,18 @@ class AnchorSearchParser(HTMLParser):
         self._current_href = ""
         self._current_text: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
         if tag != "a":
             return
 
-        attrs_dict = {key: value or "" for key, value in attrs}
+        attrs_dict = {
+            key: value or ""
+            for key, value in attrs
+        }
         href = attrs_dict.get("href", "")
 
         if not href:
@@ -48,7 +54,9 @@ class AnchorSearchParser(HTMLParser):
         if tag != "a" or not self._inside_anchor:
             return
 
-        title = " ".join("".join(self._current_text).split()).strip()
+        title = " ".join(
+            "".join(self._current_text).split()
+        ).strip()
         url = self._clean_url(self._current_href)
 
         if title and self._is_usable_url(url):
@@ -56,7 +64,6 @@ class AnchorSearchParser(HTMLParser):
                 PublicSearchResult(
                     title=unescape(title),
                     url=url,
-                    snippet="",
                     source=self.engine_name,
                     score=0,
                 )
@@ -71,11 +78,14 @@ class AnchorSearchParser(HTMLParser):
             return ""
 
         if url.startswith("//"):
-            url = "https:" + url
+            url = f"https:{url}"
 
         parsed = urlparse(url)
 
-        if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+        if (
+            "duckduckgo.com" in parsed.netloc
+            and parsed.path.startswith("/l/")
+        ):
             query = parse_qs(parsed.query)
             redirected = query.get("uddg", [""])[0]
 
@@ -91,16 +101,19 @@ class AnchorSearchParser(HTMLParser):
         parsed = urlparse(url)
         domain = parsed.netloc.lower()
 
-        blocked_domains = [
+        blocked_domains = (
             "duckduckgo.com",
             "bing.com",
             "microsoft.com",
             "go.microsoft.com",
             "r.bing.com",
             "www.bing.com",
-        ]
+        )
 
-        return not any(blocked in domain for blocked in blocked_domains)
+        return not any(
+            blocked in domain
+            for blocked in blocked_domains
+        )
 
 
 class PublicSourceSearch:
@@ -129,20 +142,29 @@ class PublicSourceSearch:
         "internet": "web",
     }
 
-    SEARCH_ENDPOINTS = [
+    SEARCH_ENDPOINTS = (
         {
             "name": "duckduckgo",
-            "url": "https://html.duckduckgo.com/html/?q={query}",
+            "url": (
+                "https://html.duckduckgo.com/"
+                "html/?q={query}"
+            ),
         },
         {
             "name": "duckduckgo_lite",
-            "url": "https://lite.duckduckgo.com/lite/?q={query}",
+            "url": (
+                "https://lite.duckduckgo.com/"
+                "lite/?q={query}"
+            ),
         },
         {
             "name": "bing",
-            "url": "https://www.bing.com/search?q={query}",
+            "url": (
+                "https://www.bing.com/"
+                "search?q={query}"
+            ),
         },
-    ]
+    )
 
     def search(
         self,
@@ -154,16 +176,20 @@ class PublicSourceSearch:
     ) -> dict:
         clean_query = " ".join(query.split()).strip()
         clean_source = self.normalize_source(source)
+        safe_limit = max(1, min(limit, 20))
 
         if not clean_query:
             return {
                 "status": "error",
                 "answer": "No search query was provided.",
-                "query": clean_query,
+                "query": "",
                 "target_source": clean_source,
+                "requested_output": requested_output,
                 "search_query": "",
                 "attempted_queries": [],
                 "results": [],
+                "search_provider": "public_web_index",
+                "search_method": "multi_query_lookup",
                 "error": "empty query",
             }
 
@@ -191,46 +217,63 @@ class PublicSourceSearch:
 
                 all_results.extend(endpoint_results)
 
-            ranked_results = self._rank_and_filter_results(
-                results=all_results,
-                query=clean_query,
-                source=clean_source,
-                requested_output=requested_output,
-                limit=limit,
-            )
+        ranked_results = self._rank_and_filter_results(
+            results=all_results,
+            query=clean_query,
+            source=clean_source,
+            requested_output=requested_output,
+            limit=safe_limit,
+        )
 
-            if ranked_results:
-                return {
-                    "status": "success",
-                    "answer": f"Found {len(ranked_results)} result(s) for {clean_query}.",
-                    "query": clean_query,
-                    "target_source": clean_source,
-                    "requested_output": requested_output,
-                    "search_query": search_query,
-                    "attempted_queries": attempted_queries,
-                    "results": ranked_results,
-                    "search_provider": ranked_results[0].get("source", "public_web_index") if ranked_results else "public_web_index",
-                    "search_method": "public_web_index_lookup",
-                    "error": "",
-                }
+        if ranked_results:
+            return {
+                "status": "success",
+                "answer": (
+                    f"Found {len(ranked_results)} public "
+                    f"source result(s) for {clean_query}."
+                ),
+                "query": clean_query,
+                "target_source": clean_source,
+                "requested_output": requested_output,
+                "search_query": (
+                    attempted_queries[0]
+                    if attempted_queries
+                    else ""
+                ),
+                "attempted_queries": attempted_queries,
+                "results": ranked_results,
+                "search_provider": "public_web_index",
+                "search_method": "multi_query_lookup",
+                "error": "",
+            }
 
         return {
             "status": "not_found",
-            "answer": f"No public results were found for {clean_query}.",
+            "answer": (
+                f"No public results were found for "
+                f"{clean_query}."
+            ),
             "query": clean_query,
             "target_source": clean_source,
             "requested_output": requested_output,
-            "search_query": attempted_queries[0] if attempted_queries else "",
+            "search_query": (
+                attempted_queries[0]
+                if attempted_queries
+                else ""
+            ),
             "attempted_queries": attempted_queries,
             "results": [],
             "search_provider": "public_web_index",
-            "search_method": "public_web_index_lookup",
+            "search_method": "multi_query_lookup",
             "error": "; ".join(errors[-3:]),
         }
 
     def normalize_source(self, source: str) -> str:
         clean_source = source.lower().strip()
-        return self.SOURCE_ALIASES.get(clean_source, clean_source or "web")
+        return self.SOURCE_ALIASES.get(
+            clean_source,
+            clean_source or "web",
+        )
 
     def build_search_queries(
         self,
@@ -245,36 +288,58 @@ class PublicSourceSearch:
             if character.isalnum()
         )
 
-        profile_terms = [
-            "official profile",
-            "official account",
-            "profile link",
-            "account",
-            "handle",
-        ]
-
-        if not site:
-            return [
-                query,
-                f'"{query}"',
-                f"{query} official",
-                f"{query} profile",
-            ]
-
         queries = [
-            f'"{query}" {source}',
-            f"{query} {source}",
-            f"{query} {source} official",
-            f"{query} {source} profile",
-            f"site:{site} \"{query}\"",
-            f"site:{site} {query}",
-            f"site:{site} {handle_candidate}",
+            f'"{query}"',
+            query,
         ]
 
-        if requested_output == "profile_link":
+        if requested_output == "bio_summary":
+            research_terms = (
+                "biography",
+                "background",
+                "interview",
+                "official website",
+                "news",
+                "profile",
+            )
+
+            for term in research_terms:
+                queries.append(f'"{query}" {term}')
+
+        elif requested_output == "profile_link":
+            profile_terms = (
+                "official profile",
+                "official account",
+                "profile link",
+                "account",
+                "handle",
+            )
+
             for term in profile_terms:
-                queries.append(f"{query} {source} {term}")
-                queries.append(f"site:{site} {query} {term}")
+                queries.append(f'"{query}" {term}')
+
+        elif requested_output == "recent_activity":
+            activity_terms = (
+                "latest",
+                "recent activity",
+                "updates",
+                "news",
+            )
+
+            for term in activity_terms:
+                queries.append(f'"{query}" {term}')
+
+        if site:
+            queries.extend(
+                [
+                    f'"{query}" {source}',
+                    f"{query} {source}",
+                    f"{query} {source} official",
+                    f"site:{site} \"{query}\"",
+                    f"site:{site} {query}",
+                    f"site:{site} {handle_candidate}",
+                ]
+            )
 
         return self._dedupe_strings(queries)
 
@@ -286,7 +351,9 @@ class PublicSourceSearch:
         source: str,
         timeout: int,
     ) -> tuple[list[PublicSearchResult], str]:
-        url = endpoint_template.format(query=quote_plus(search_query))
+        url = endpoint_template.format(
+            query=quote_plus(search_query)
+        )
 
         request = urllib.request.Request(
             url,
@@ -295,29 +362,47 @@ class PublicSourceSearch:
                     "Mozilla/5.0 DataPlatformSearch/1.0 "
                     "(public source lookup)"
                 ),
-                "Accept": "text/html,application/xhtml+xml",
+                "Accept": (
+                    "text/html,"
+                    "application/xhtml+xml"
+                ),
             },
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                html = response.read().decode("utf-8", errors="replace")
+            with urllib.request.urlopen(
+                request,
+                timeout=timeout,
+            ) as response:
+                html = response.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
 
         except urllib.error.URLError as error:
             return [], f"{engine_name}: {error}"
 
-        parser = AnchorSearchParser(engine_name=engine_name)
+        parser = AnchorSearchParser(
+            engine_name=engine_name
+        )
         parser.feed(html)
 
         results = [
             item
             for item in parser.results
-            if self._result_matches_source(item.url, source)
+            if self._result_matches_source(
+                item.url,
+                source,
+            )
         ]
 
         return results, ""
 
-    def _result_matches_source(self, url: str, source: str) -> bool:
+    def _result_matches_source(
+        self,
+        url: str,
+        source: str,
+    ) -> bool:
         if source == "web":
             return True
 
@@ -337,7 +422,10 @@ class PublicSourceSearch:
 
         return True
 
-    def _is_likely_instagram_profile(self, url: str) -> bool:
+    def _is_likely_instagram_profile(
+        self,
+        url: str,
+    ) -> bool:
         parsed = urlparse(url)
         path_parts = [
             part
@@ -360,7 +448,10 @@ class PublicSourceSearch:
             "privacy",
         }
 
-        return path_parts[0].lower() not in blocked_first_parts
+        return (
+            path_parts[0].lower()
+            not in blocked_first_parts
+        )
 
     def _rank_and_filter_results(
         self,
@@ -391,7 +482,9 @@ class PublicSourceSearch:
         ranked: list[PublicSearchResult] = []
 
         for item in unique_results:
-            combined = f"{item.title} {item.url} {item.snippet}".lower()
+            combined = (
+                f"{item.title} {item.url}"
+            ).lower()
             score = 0
 
             for token in tokens:
@@ -399,7 +492,10 @@ class PublicSourceSearch:
                     score += 2
 
             if source != "web":
-                site = self.SOURCE_SITE_MAP.get(source, "")
+                site = self.SOURCE_SITE_MAP.get(
+                    source,
+                    "",
+                )
 
                 if site and site in item.url.lower():
                     score += 8
@@ -407,26 +503,35 @@ class PublicSourceSearch:
             if requested_output == "profile_link":
                 score += 4
 
-            if source == "instagram" and self._is_likely_instagram_profile(item.url):
+            if requested_output == "bio_summary":
+                score += 3
+
+            if (
+                source == "instagram"
+                and self._is_likely_instagram_profile(
+                    item.url
+                )
+            ):
                 score += 6
 
             ranked.append(
                 PublicSearchResult(
                     title=item.title,
                     url=item.url,
-                    snippet=item.snippet,
                     source=item.source,
                     score=score,
                 )
             )
 
-        ranked.sort(key=lambda item: item.score, reverse=True)
+        ranked.sort(
+            key=lambda item: item.score,
+            reverse=True,
+        )
 
         return [
             {
                 "title": item.title,
                 "url": item.url,
-                "snippet": item.snippet,
                 "source": item.source,
                 "score": item.score,
             }
@@ -434,12 +539,17 @@ class PublicSourceSearch:
             if item.score > 0
         ]
 
-    def _dedupe_strings(self, values: list[str]) -> list[str]:
+    def _dedupe_strings(
+        self,
+        values: list[str],
+    ) -> list[str]:
         seen: set[str] = set()
         output: list[str] = []
 
         for value in values:
-            clean_value = " ".join(value.split()).strip()
+            clean_value = " ".join(
+                value.split()
+            ).strip()
 
             if clean_value and clean_value not in seen:
                 seen.add(clean_value)

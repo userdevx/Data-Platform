@@ -13,6 +13,7 @@ from urllib.error import URLError, HTTPError
 from engine.intelligence.memory_runtime import build_memory_context_for_provider, process_memory_command_from_definition
 
 from engine.intelligence.search.public_source_search import PublicSourceSearch
+from engine.intelligence.research.entity_research_service import EntityResearchService
 from engine.intelligence.search.source_request_parser import SourceSearchRequestParser
 
 
@@ -144,23 +145,20 @@ class PublicSourceSearchCapability:
                 "capability": self.name,
                 "source": "public_source_search",
                 "status": "clarification_needed",
-                "answer": "More information is needed before running the source search.",
+                "answer": parsed.clarification_question,
                 "data": {
-                    "action": "Request clarification.",
+                    "action": "Request a research subject.",
                     "explanation": (
-                        "The request included a target and a source, but did not "
-                        "specify what output should be returned."
+                        "The request did not contain a usable "
+                        "research subject."
                     ),
                     "next_step": parsed.clarification_question,
-                    "query": parsed.query,
+                    "query": "",
                     "target_source": parsed.source,
-                    "requested_output": "",
-                    "clarification_options": [
-                        "official profile link",
-                        "bio summary",
-                        "recent activity",
-                        "general results",
-                    ],
+                    "requested_output": (
+                        parsed.requested_output
+                    ),
+                    "results": [],
                 },
                 "errors": [],
             }
@@ -170,59 +168,148 @@ class PublicSourceSearchCapability:
                 "capability": self.name,
                 "source": "public_source_search",
                 "status": "rejected",
-                "answer": "Public source search is disabled by the active configuration.",
+                "answer": (
+                    "Public source search is disabled by "
+                    "the active configuration."
+                ),
                 "data": {
-                    "action": "Rejected public source search.",
-                    "explanation": "Network access must be enabled before public search can run.",
-                    "next_step": "Enable network access in the active intelligence definition.",
+                    "action": (
+                        "Rejected public source search."
+                    ),
+                    "explanation": (
+                        "Network access must be enabled "
+                        "before public search can run."
+                    ),
+                    "next_step": (
+                        "Enable network access in the active "
+                        "intelligence definition."
+                    ),
                     "query": parsed.query,
                     "target_source": parsed.source,
+                    "results": [],
                 },
                 "errors": ["network_access is false"],
             }
 
-        searcher = PublicSourceSearch()
-        result = searcher.search(
-            query=parsed.query,
-            source=parsed.source,
-            requested_output=parsed.requested_output,
-            limit=5,
-        )
+        if parsed.requested_output == "bio_summary":
+            result = EntityResearchService().research(
+                query=parsed.query,
+                source=parsed.source,
+                limit=5,
+            )
+            answer = result.get("answer", "")
+            next_step = (
+                "Review the retrieved source excerpts and "
+                "open the associated source links."
+            )
+
+        else:
+            result = PublicSourceSearch().search(
+                query=parsed.query,
+                source=parsed.source,
+                requested_output=(
+                    parsed.requested_output
+                ),
+                limit=8,
+            )
+            answer = build_search_answer_from_results(
+                query=result.get(
+                    "query",
+                    parsed.query,
+                ),
+                target_source=result.get(
+                    "target_source",
+                    parsed.source,
+                ),
+                results=result.get(
+                    "results",
+                    [],
+                ),
+            )
+            next_step = (
+                "Open a source or request full "
+                "entity research."
+            )
 
         return {
             "capability": self.name,
             "source": "public_source_search",
-            "status": result.get("status", "error"),
-            "answer": build_search_answer_from_results(
-                query=result.get("query", parsed.query),
-                target_source=result.get("target_source", parsed.source),
-                results=result.get("results", []),
+            "status": result.get(
+                "status",
+                "error",
             ),
+            "answer": answer,
             "data": {
-                "action": f"Searched {result.get('target_source', parsed.source)}.",
-                "explanation": (
-                    "The system used the user-provided target and source. "
-                    "No names are hardcoded."
+                "action": (
+                    f"Searched "
+                    f"{result.get('target_source', parsed.source)}."
                 ),
-                "next_step": "Open a result or refine the request with more detail.",
-                "query": result.get("query", parsed.query),
-                "target_source": result.get("target_source", parsed.source),
-                "requested_output": parsed.requested_output,
-                "search_query": result.get("search_query", ""),
-                "search_provider": result.get("search_provider", "public_web_index"),
-                "search_method": result.get("search_method", "public_web_index_lookup"),
-                "attempted_queries": result.get("attempted_queries", []),
+                "explanation": (
+                    "The runtime used the subject and source "
+                    "provided at request time."
+                ),
+                "next_step": next_step,
+                "query": result.get(
+                    "query",
+                    parsed.query,
+                ),
+                "target_source": result.get(
+                    "target_source",
+                    parsed.source,
+                ),
+                "requested_output": (
+                    parsed.requested_output
+                ),
+                "search_query": result.get(
+                    "search_query",
+                    "",
+                ),
+                "search_provider": result.get(
+                    "search_provider",
+                    "public_web_index",
+                ),
+                "search_method": result.get(
+                    "search_method",
+                    "",
+                ),
+                "attempted_queries": result.get(
+                    "attempted_queries",
+                    [],
+                ),
+                "research": result.get(
+                    "research",
+                    {},
+                ),
                 "results": [
                     {
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "source": item.get("source", ""),
-                        "score": item.get("score", 0),
+                        "title": item.get(
+                            "title",
+                            "",
+                        ),
+                        "url": item.get(
+                            "url",
+                            "",
+                        ),
+                        "source": item.get(
+                            "source",
+                            "",
+                        ),
+                        "score": item.get(
+                            "score",
+                            0,
+                        ),
                     }
-                    for item in result.get("results", [])
+                    for item in result.get(
+                        "results",
+                        [],
+                    )
                 ],
             },
-            "errors": [result["error"]] if result.get("error") else [],
+            "errors": (
+                [result["error"]]
+                if result.get("error")
+                else []
+            ),
         }
 
 
