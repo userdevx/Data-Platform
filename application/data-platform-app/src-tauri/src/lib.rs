@@ -2,7 +2,7 @@ mod developer_terminal;
 mod intelligence_bridge;
 
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -74,6 +74,25 @@ struct AgentTaskResult {
     path: String,
 }
 
+#[derive(Serialize)]
+struct EngineStatus {
+    status: String,
+    record_count: usize,
+    records_path: String,
+}
+
+#[derive(Clone, Serialize)]
+struct DataRecord {
+    id: String,
+    source: String,
+    category: String,
+    sensor_type: String,
+    value: Value,
+    unit: String,
+    timestamp: String,
+    metadata: Option<Map<String, Value>>,
+}
+
 fn timestamp() -> Result<u64, String> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -101,17 +120,17 @@ fn find_data_platform_root() -> Result<PathBuf, String> {
     }
 
     for candidate in candidates {
-        let worker = candidate.join("engine").join("agents").join("agent_worker.py");
+        let worker = candidate
+            .join("engine")
+            .join("agents")
+            .join("agent_worker.py");
 
         if worker.exists() {
             return Ok(candidate);
         }
     }
 
-    Err(
-        "Could not find Data-Platform runtime. Expected engine/agents/agent_worker.py."
-            .to_string(),
-    )
+    Err("Could not find Data-Platform runtime. Expected engine/agents/agent_worker.py.".to_string())
 }
 
 fn data_dir() -> Result<PathBuf, String> {
@@ -136,7 +155,8 @@ fn data_dir() -> Result<PathBuf, String> {
 
 fn logs_dir() -> Result<PathBuf, String> {
     let path = find_data_platform_root()?.join("data").join("logs");
-    fs::create_dir_all(&path).map_err(|error| format!("Unable to create logs folder: {}", error))?;
+    fs::create_dir_all(&path)
+        .map_err(|error| format!("Unable to create logs folder: {}", error))?;
     Ok(path)
 }
 
@@ -158,8 +178,116 @@ fn records_path() -> Result<PathBuf, String> {
     Ok(data_dir()?.join("records.jsonl"))
 }
 
+fn data_engine_records_path() -> Result<PathBuf, String> {
+    Ok(data_dir()?.join("records.json"))
+}
+
+fn value_as_string(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(text)) => text.clone(),
+        Some(Value::Number(number)) => number.to_string(),
+        Some(Value::Bool(boolean)) => boolean.to_string(),
+        Some(Value::Null) | None => String::new(),
+        Some(other) => other.to_string(),
+    }
+}
+
+fn normalize_data_record(record: &Map<String, Value>, fallback_index: usize) -> DataRecord {
+    let id = value_as_string(record.get("id")).trim().to_string();
+
+    let timestamp = ["timestamp", "created_at", "updated_at"]
+        .iter()
+        .find_map(|field| {
+            let value = value_as_string(record.get(*field));
+
+            if value.trim().is_empty() {
+                None
+            } else {
+                Some(value)
+            }
+        })
+        .unwrap_or_default();
+
+    let metadata = record.get("metadata").and_then(Value::as_object).cloned();
+
+    DataRecord {
+        id: if id.is_empty() {
+            (fallback_index + 1).to_string()
+        } else {
+            id
+        },
+        source: value_as_string(record.get("source")),
+        category: value_as_string(record.get("category")),
+        sensor_type: value_as_string(record.get("sensor_type")),
+        value: record.get("value").cloned().unwrap_or(Value::Null),
+        unit: value_as_string(record.get("unit")),
+        timestamp,
+        metadata,
+    }
+}
+
+fn load_data_engine_records() -> Result<(PathBuf, Vec<DataRecord>), String> {
+    let path = data_engine_records_path()?;
+
+    if !path.exists() {
+        return Err(format!(
+            "Data Engine records file was not found: {}",
+            path.display()
+        ));
+    }
+
+    let raw = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "Unable to read Data Engine records file {}: {}",
+            path.display(),
+            error
+        )
+    })?;
+
+    let parsed: Value = serde_json::from_str(&raw).map_err(|error| {
+        format!(
+            "Data Engine records file contains invalid JSON {}: {}",
+            path.display(),
+            error
+        )
+    })?;
+
+    let records = parsed.as_array().ok_or_else(|| {
+        format!(
+            "Data Engine records file must contain a JSON array: {}",
+            path.display()
+        )
+    })?;
+
+    let mut normalized = records
+        .iter()
+        .enumerate()
+        .filter_map(|(index, value)| {
+            value
+                .as_object()
+                .map(|record| normalize_data_record(record, index))
+        })
+        .collect::<Vec<_>>();
+
+    normalized.sort_by(|left, right| {
+        right
+            .timestamp
+            .cmp(&left.timestamp)
+            .then_with(|| right.id.cmp(&left.id))
+    });
+
+    Ok((path, normalized))
+}
+
+fn normalize_record_limit(limit: usize) -> usize {
+    limit.clamp(1, 500)
+}
+
 fn layer_path(layer: &str) -> Result<PathBuf, String> {
-    Ok(data_dir()?.join("data_lake").join(layer).join("records.jsonl"))
+    Ok(data_dir()?
+        .join("data_lake")
+        .join(layer)
+        .join("records.jsonl"))
 }
 
 fn path_to_string(path: Option<PathBuf>) -> Option<String> {
@@ -272,7 +400,9 @@ fn unique_path(folder: &Path, file_name: &str) -> PathBuf {
 
     let path = Path::new(file_name);
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let extension = path.extension().map(|ext| ext.to_string_lossy().to_string());
+    let extension = path
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_string());
 
     let mut counter = 1;
 
@@ -342,7 +472,14 @@ fn data_quality() -> Result<String, String> {
 
     for line in &lines {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-            let required = ["source", "category", "sensor_type", "value", "unit", "timestamp"];
+            let required = [
+                "source",
+                "category",
+                "sensor_type",
+                "value",
+                "unit",
+                "timestamp",
+            ];
 
             if required
                 .iter()
@@ -509,6 +646,44 @@ fn csv_escape(value: &str) -> String {
 }
 
 #[tauri::command]
+fn get_engine_status() -> Result<EngineStatus, String> {
+    let (path, records) = load_data_engine_records()?;
+
+    Ok(EngineStatus {
+        status: "ready".to_string(),
+        record_count: records.len(),
+        records_path: path.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn get_recent_records(limit: usize) -> Result<Vec<DataRecord>, String> {
+    let (_, records) = load_data_engine_records()?;
+    let limit = normalize_record_limit(limit);
+
+    Ok(records.into_iter().take(limit).collect())
+}
+
+#[tauri::command]
+fn query_records(sensor_type: Option<String>, limit: usize) -> Result<Vec<DataRecord>, String> {
+    let (_, records) = load_data_engine_records()?;
+    let limit = normalize_record_limit(limit);
+
+    let normalized_sensor_type = sensor_type
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
+
+    let filtered = records.into_iter().filter(|record| {
+        normalized_sensor_type
+            .as_ref()
+            .map(|expected| record.sensor_type.to_lowercase() == *expected)
+            .unwrap_or(true)
+    });
+
+    Ok(filtered.take(limit).collect())
+}
+
+#[tauri::command]
 fn get_user_locations() -> Vec<UserLocation> {
     let mut locations = Vec::new();
 
@@ -609,7 +784,9 @@ fn read_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
 
 #[tauri::command]
 fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionResult, String> {
-    let selected_path = path.clone().ok_or("Choose a path before connecting data.")?;
+    let selected_path = path
+        .clone()
+        .ok_or("Choose a path before connecting data.")?;
     let selected_file = Path::new(&selected_path);
 
     if !selected_file.exists() {
@@ -775,8 +952,11 @@ fn create_database(
         "metadata": database_metadata
     });
 
-    fs::write(database_folder.join("records.jsonl"), format!("{}\n", record))
-        .map_err(|error| format!("Unable to write database record: {}", error))?;
+    fs::write(
+        database_folder.join("records.jsonl"),
+        format!("{}\n", record),
+    )
+    .map_err(|error| format!("Unable to write database record: {}", error))?;
 
     append_jsonl(&records_path()?, record)?;
 
@@ -790,7 +970,6 @@ fn create_database(
         source_file: selected_file_path,
     })
 }
-
 
 fn ensure_workspace_storage(database_path: &str) -> Result<(), String> {
     if database_path.trim().is_empty() {
@@ -811,7 +990,10 @@ fn ensure_workspace_storage(database_path: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn workspace_refresh(database_name: String, database_path: String) -> Result<WorkspaceDashboard, String> {
+fn workspace_refresh(
+    database_name: String,
+    database_path: String,
+) -> Result<WorkspaceDashboard, String> {
     let data = data_dir()?;
     let raw = line_count(&layer_path("raw")?);
 
@@ -872,19 +1054,31 @@ fn workspace_action(
                     rows.push(row(vec![
                         (
                             "source_id",
-                            value["metadata"]["source_id"].as_str().unwrap_or("").to_string(),
+                            value["metadata"]["source_id"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string(),
                         ),
                         (
                             "file_name",
-                            value["metadata"]["file_name"].as_str().unwrap_or("").to_string(),
+                            value["metadata"]["file_name"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string(),
                         ),
                         (
                             "stored_path",
-                            value["metadata"]["stored_path"].as_str().unwrap_or("").to_string(),
+                            value["metadata"]["stored_path"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string(),
                         ),
                         (
                             "status",
-                            value["metadata"]["status"].as_str().unwrap_or("").to_string(),
+                            value["metadata"]["status"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string(),
                         ),
                     ]));
                 }
@@ -1105,7 +1299,10 @@ fn workspace_action(
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                     rows.push(row(vec![
                         ("source", value["source"].as_str().unwrap_or("").to_string()),
-                        ("category", value["category"].as_str().unwrap_or("").to_string()),
+                        (
+                            "category",
+                            value["category"].as_str().unwrap_or("").to_string(),
+                        ),
                         (
                             "sensor_type",
                             value["sensor_type"].as_str().unwrap_or("").to_string(),
@@ -1131,7 +1328,9 @@ fn workspace_action(
         }),
 
         "Export" => {
-            let export_path = data_dir()?.join("exports").join("workspace_logs_export.csv");
+            let export_path = data_dir()?
+                .join("exports")
+                .join("workspace_logs_export.csv");
             let rows = log_rows()?;
             let headers = vec![
                 "log_id",
@@ -1217,8 +1416,8 @@ fn start_agent_worker() -> Result<AgentTaskResult, String> {
         ));
     }
 
-    let log_file = fs::File::create(&log)
-        .map_err(|error| format!("Unable to create agent log: {}", error))?;
+    let log_file =
+        fs::File::create(&log).map_err(|error| format!("Unable to create agent log: {}", error))?;
 
     let python = root.join("venv").join("bin").join("python");
     let python_command = if python.exists() {
@@ -1303,16 +1502,14 @@ fn read_agent_log() -> Result<String, String> {
         return Ok("No agent log found yet.".to_string());
     }
 
-    fs::read_to_string(&log_file)
-        .map_err(|error| format!("Unable to read agent log: {}", error))
+    fs::read_to_string(&log_file).map_err(|error| format!("Unable to read agent log: {}", error))
 }
 #[tauri::command]
 fn update_data_platform() -> Result<String, String> {
     let root = std::env::var("DATA_PLATFORM_ROOT")
         .map(std::path::PathBuf::from)
         .or_else(|_| {
-            std::env::var("HOME")
-                .map(|home| std::path::PathBuf::from(home).join("Data-Platform"))
+            std::env::var("HOME").map(|home| std::path::PathBuf::from(home).join("Data-Platform"))
         })
         .or_else(|_| {
             std::env::var("USERPROFILE")
@@ -1395,11 +1592,9 @@ echo "Update complete. Restart Data Platform to load the newest build."
 
     Err(format!(
         "Update failed.\n\nSTDOUT:\n{}\n\nSTDERR:\n{}",
-        stdout,
-        stderr
+        stdout, stderr
     ))
 }
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -1412,11 +1607,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_engine_status,
+            get_recent_records,
+            query_records,
             intelligence_bridge::process_intelligence_request,
             intelligence_bridge::get_intelligence_definition,
             intelligence_bridge::get_data_platform_root,
-            
-            
             update_data_platform,
             get_user_locations,
             read_directory,

@@ -65,7 +65,10 @@ fn detect_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
 }
 
-fn run_shell_command(command: &str, working_directory: &PathBuf) -> Result<std::process::Output, String> {
+fn run_shell_command(
+    command: &str,
+    working_directory: &PathBuf,
+) -> Result<std::process::Output, String> {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
             .arg("/C")

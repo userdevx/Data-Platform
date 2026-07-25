@@ -21,7 +21,10 @@ fn data_platform_root() -> Result<PathBuf, String> {
         return Ok(path);
     }
 
-    Err("Data Platform root was not found. Set DATA_PLATFORM_ROOT or use ~/Data-Platform.".to_string())
+    Err(
+        "Data Platform root was not found. Set DATA_PLATFORM_ROOT or use ~/Data-Platform."
+            .to_string(),
+    )
 }
 
 fn python_binary(root: &PathBuf) -> String {
@@ -68,8 +71,7 @@ pub fn process_intelligence_request(
 
         return Err(format!(
             "Intelligence Runtime failed with status {}: {}",
-            output.status,
-            stderr
+            output.status, stderr
         ));
     }
 
@@ -83,9 +85,7 @@ pub fn process_intelligence_request(
 }
 
 #[tauri::command]
-pub fn get_intelligence_definition(
-    definition: Option<String>,
-) -> Result<String, String> {
+pub fn get_intelligence_definition(definition: Option<String>) -> Result<String, String> {
     let root = data_platform_root()?;
 
     let definition_path = definition.unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
