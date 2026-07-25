@@ -8,8 +8,17 @@ class ResearchSource(TypedDict):
     url: str
     platform: str | None
     source_type: str
-    snippet: str
+    retrieved_text: str
+    source_excerpt: str
     retrieved_at: str
+
+
+class UnretrievedSource(TypedDict):
+    title: str
+    url: str
+    source_type: str
+    reason: str
+    discovered_at: str
 
 
 class ResearchFact(TypedDict):
@@ -26,6 +35,7 @@ class EntityResearchResult(TypedDict):
     possible_matches: list[dict[str, Any]]
     public_profiles: list[ResearchSource]
     sources_reviewed: list[ResearchSource]
+    unretrieved_sources: list[UnretrievedSource]
     source_count: int
     searches_performed: list[str]
     limitations: list[str]
