@@ -1,0 +1,24 @@
+{
+  "visual_analysis": {
+    "enabled": false,
+    "provider": "",
+    "model": "",
+    "maximum_media_size_bytes": 15728640,
+    "sampling": {
+      "minimum_interval_ms": 500,
+      "maximum_interval_ms": 5000,
+      "analyze_on_change": true,
+      "maximum_pending_frames": 2
+    },
+    "validation": {
+      "minimum_entity_confidence": 0.0,
+      "minimum_relation_confidence": 0.0,
+      "minimum_temporal_frames": 2
+    },
+    "storage": {
+      "store_raw_frames": false,
+      "store_provider_responses": false,
+      "store_validated_observations": true
+    }
+  }
+}
