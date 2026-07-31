@@ -15,8 +15,12 @@ from engine.intelligence.vision.config import (
 from engine.intelligence.vision.media_validation import (
     validate_media_file,
 )
-from engine.intelligence.vision.provider_registry import (
-    VisualAnalyzerRegistry,
+from engine.intelligence.vision.provider_factory import (
+    VisualProviderConfigurationError,
+    build_visual_analyzer,
+)
+from engine.intelligence.vision.providers.unavailable import (
+    UnavailableVisualAnalyzer,
 )
 from engine.intelligence.vision.runtime import VisualRuntime
 from engine.intelligence.vision.still_image_source import (
@@ -52,10 +56,24 @@ def build_response(
 def configuration_to_record(
     configuration: VisualConfiguration,
 ) -> dict[str, Any]:
+    runtime = configuration.provider_runtime
+
     return {
         "enabled": configuration.enabled,
         "provider": configuration.provider,
         "model": configuration.model,
+        "provider_runtime": {
+            "endpoint_url": runtime.endpoint_url,
+            "api_key_environment_variable": (
+                runtime.api_key_environment_variable
+            ),
+            "request_timeout_seconds": (
+                runtime.request_timeout_seconds
+            ),
+            "maximum_output_tokens": (
+                runtime.maximum_output_tokens
+            ),
+        },
         "maximum_media_size_bytes": (
             configuration.maximum_media_size_bytes
         ),
@@ -79,6 +97,34 @@ def load_configuration(
     )
 
 
+def _configuration_error_response(
+    error: Exception,
+) -> dict[str, Any]:
+    return build_response(
+        status="configuration_error",
+        answer=(
+            "The visual runtime configuration "
+            "could not be loaded."
+        ),
+        errors=(str(error),),
+    )
+
+
+def _build_configured_analyzer(
+    configuration: VisualConfiguration,
+):
+    try:
+        return build_visual_analyzer(
+            configuration
+        )
+    except VisualProviderConfigurationError:
+        raise
+    except ValueError as error:
+        raise VisualProviderConfigurationError(
+            str(error)
+        ) from error
+
+
 def get_visual_status(
     *,
     configuration_path: Path,
@@ -92,14 +138,15 @@ def get_visual_status(
         ValueError,
         json.JSONDecodeError,
     ) as error:
-        return build_response(
-            status="configuration_error",
-            answer=(
-                "The visual runtime configuration "
-                "could not be loaded."
-            ),
-            errors=(str(error),),
+        return _configuration_error_response(
+            error
         )
+
+    configuration_record = (
+        configuration_to_record(
+            configuration
+        )
+    )
 
     if not configuration.enabled:
         return build_response(
@@ -110,9 +157,7 @@ def get_visual_status(
             ),
             data={
                 "configuration": (
-                    configuration_to_record(
-                        configuration
-                    )
+                    configuration_record
                 ),
             },
         )
@@ -126,9 +171,43 @@ def get_visual_status(
             ),
             data={
                 "configuration": (
-                    configuration_to_record(
-                        configuration
-                    )
+                    configuration_record
+                ),
+            },
+        )
+
+    try:
+        analyzer = _build_configured_analyzer(
+            configuration
+        )
+    except VisualProviderConfigurationError as error:
+        return build_response(
+            status="configuration_error",
+            answer=(
+                "The configured visual provider "
+                "could not be created."
+            ),
+            data={
+                "configuration": (
+                    configuration_record
+                ),
+            },
+            errors=(str(error),),
+        )
+
+    if isinstance(
+        analyzer,
+        UnavailableVisualAnalyzer,
+    ):
+        return build_response(
+            status="unavailable",
+            answer=(
+                "The configured visual-analysis "
+                "provider is not available."
+            ),
+            data={
+                "configuration": (
+                    configuration_record
                 ),
             },
         )
@@ -140,10 +219,11 @@ def get_visual_status(
         ),
         data={
             "configuration": (
-                configuration_to_record(
-                    configuration
-                )
+                configuration_record
             ),
+            "runtime": {
+                "provider_available": True,
+            },
         },
     )
 
@@ -178,13 +258,8 @@ def analyze_image(
         ValueError,
         json.JSONDecodeError,
     ) as error:
-        return build_response(
-            status="configuration_error",
-            answer=(
-                "The visual runtime configuration "
-                "could not be loaded."
-            ),
-            errors=(str(error),),
+        return _configuration_error_response(
+            error
         )
 
     media_validation = validate_media_file(
@@ -219,11 +294,26 @@ def analyze_image(
             ),
         )
 
-    registry = VisualAnalyzerRegistry()
-
-    analyzer = registry.create(
-        configuration.provider
-    )
+    try:
+        analyzer = _build_configured_analyzer(
+            configuration
+        )
+    except VisualProviderConfigurationError as error:
+        return build_response(
+            status="configuration_error",
+            answer=(
+                "The configured visual provider "
+                "could not be created."
+            ),
+            data={
+                "configuration": (
+                    configuration_to_record(
+                        configuration
+                    )
+                ),
+            },
+            errors=(str(error),),
+        )
 
     records: list[
         dict[str, Any]
@@ -265,6 +355,11 @@ def analyze_image(
         status=result.status,
         answer=result.answer,
         data={
+            "configuration": (
+                configuration_to_record(
+                    configuration
+                )
+            ),
             "observation": observation_record,
             "records": list(
                 result.records
