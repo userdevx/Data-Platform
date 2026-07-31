@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,14 @@ class StorageConfiguration:
 
 
 @dataclass(frozen=True)
+class ProviderRuntimeConfiguration:
+    endpoint_url: str = ""
+    api_key_environment_variable: str = ""
+    request_timeout_seconds: int = 30
+    maximum_output_tokens: int = 1024
+
+
+@dataclass(frozen=True)
 class VisualConfiguration:
     enabled: bool
     provider: str
@@ -37,6 +45,9 @@ class VisualConfiguration:
     sampling: SamplingConfiguration
     validation: ValidationConfiguration
     storage: StorageConfiguration
+    provider_runtime: ProviderRuntimeConfiguration = field(
+        default_factory=ProviderRuntimeConfiguration
+    )
 
 
 def _mapping(
@@ -50,6 +61,20 @@ def _mapping(
         )
 
     return value
+
+
+def _optional_mapping(
+    value: Any,
+    *,
+    field_name: str,
+) -> dict[str, Any]:
+    if value is None:
+        return {}
+
+    return _mapping(
+        value,
+        field_name=field_name,
+    )
 
 
 def _bounded_confidence(
@@ -99,8 +124,17 @@ def load_visual_configuration(
         field_name="visual_analysis.storage",
     )
 
+    provider_runtime = _optional_mapping(
+        root.get("provider_runtime"),
+        field_name=(
+            "visual_analysis.provider_runtime"
+        ),
+    )
+
     configuration = VisualConfiguration(
-        enabled=bool(root.get("enabled", False)),
+        enabled=bool(
+            root.get("enabled", False)
+        ),
         provider=str(
             root.get("provider", "")
         ).strip(),
@@ -108,20 +142,35 @@ def load_visual_configuration(
             root.get("model", "")
         ).strip(),
         maximum_media_size_bytes=int(
-            root.get("maximum_media_size_bytes", 0)
+            root.get(
+                "maximum_media_size_bytes",
+                0,
+            )
         ),
         sampling=SamplingConfiguration(
             minimum_interval_ms=int(
-                sampling.get("minimum_interval_ms", 0)
+                sampling.get(
+                    "minimum_interval_ms",
+                    0,
+                )
             ),
             maximum_interval_ms=int(
-                sampling.get("maximum_interval_ms", 0)
+                sampling.get(
+                    "maximum_interval_ms",
+                    0,
+                )
             ),
             analyze_on_change=bool(
-                sampling.get("analyze_on_change", True)
+                sampling.get(
+                    "analyze_on_change",
+                    True,
+                )
             ),
             maximum_pending_frames=int(
-                sampling.get("maximum_pending_frames", 0)
+                sampling.get(
+                    "maximum_pending_frames",
+                    0,
+                )
             ),
         ),
         validation=ValidationConfiguration(
@@ -174,6 +223,34 @@ def load_visual_configuration(
                 )
             ),
         ),
+        provider_runtime=(
+            ProviderRuntimeConfiguration(
+                endpoint_url=str(
+                    provider_runtime.get(
+                        "endpoint_url",
+                        "",
+                    )
+                ).strip(),
+                api_key_environment_variable=str(
+                    provider_runtime.get(
+                        "api_key_environment_variable",
+                        "",
+                    )
+                ).strip(),
+                request_timeout_seconds=int(
+                    provider_runtime.get(
+                        "request_timeout_seconds",
+                        30,
+                    )
+                ),
+                maximum_output_tokens=int(
+                    provider_runtime.get(
+                        "maximum_output_tokens",
+                        1024,
+                    )
+                ),
+            )
+        ),
     )
 
     validate_visual_configuration(
@@ -191,7 +268,10 @@ def validate_visual_configuration(
             "maximum_media_size_bytes must be positive."
         )
 
-    if configuration.sampling.minimum_interval_ms < 1:
+    if (
+        configuration.sampling.minimum_interval_ms
+        < 1
+    ):
         raise ValueError(
             "minimum_interval_ms must be positive."
         )
@@ -205,17 +285,55 @@ def validate_visual_configuration(
             "minimum_interval_ms."
         )
 
-    if configuration.sampling.maximum_pending_frames < 1:
+    if (
+        configuration.sampling.maximum_pending_frames
+        < 1
+    ):
         raise ValueError(
             "maximum_pending_frames must be positive."
         )
 
-    if configuration.validation.minimum_temporal_frames < 2:
+    if (
+        configuration.validation.minimum_temporal_frames
+        < 2
+    ):
         raise ValueError(
             "minimum_temporal_frames must be at least 2."
         )
 
-    if configuration.enabled and not configuration.provider:
+    runtime = configuration.provider_runtime
+
+    if runtime.request_timeout_seconds < 1:
+        raise ValueError(
+            "request_timeout_seconds must be positive."
+        )
+
+    if runtime.maximum_output_tokens < 1:
+        raise ValueError(
+            "maximum_output_tokens must be positive."
+        )
+
+    if not configuration.enabled:
+        return
+
+    if not configuration.provider:
         raise ValueError(
             "An enabled visual runtime requires a provider."
+        )
+
+    if not configuration.model:
+        raise ValueError(
+            "An enabled visual runtime requires a model."
+        )
+
+    if not runtime.endpoint_url:
+        raise ValueError(
+            "An enabled visual runtime requires "
+            "a provider endpoint URL."
+        )
+
+    if not runtime.api_key_environment_variable:
+        raise ValueError(
+            "An enabled visual runtime requires "
+            "an API key environment-variable name."
         )

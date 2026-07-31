@@ -3,6 +3,12 @@
     "enabled": false,
     "provider": "",
     "model": "",
+    "provider_runtime": {
+      "endpoint_url": "",
+      "api_key_environment_variable": "",
+      "request_timeout_seconds": 30,
+      "maximum_output_tokens": 1024
+    },
     "maximum_media_size_bytes": 15728640,
     "sampling": {
       "minimum_interval_ms": 500,
