@@ -1,27 +1,25 @@
 from __future__ import annotations
 
 
-class VisualModelContractError(ValueError):
-    """Base error for invalid visual-model service contracts."""
+class VisualModelServiceError(Exception):
+    """Base error for the private visual model service."""
 
 
 class VisualModelRequestValidationError(
-    VisualModelContractError
+    VisualModelServiceError,
+    ValueError,
 ):
-    """Raised when a visual-model request is invalid."""
+    """Raised when a visual model request is invalid."""
 
 
 class VisualModelResponseValidationError(
-    VisualModelContractError
+    VisualModelServiceError,
+    ValueError,
 ):
-    """Raised when a visual-model response is invalid."""
+    """Raised when a visual model response is invalid."""
 
 
-class VisualModelRuntimeError(RuntimeError):
-    """Base error raised by a visual-model runtime."""
-
-
-class VisualModelRuntimeUnavailableError(
-    VisualModelRuntimeError
+class VisualModelRuntimeError(
+    VisualModelServiceError
 ):
-    """Raised when the configured runtime cannot process requests."""
+    """Raised when the configured visual runtime fails."""

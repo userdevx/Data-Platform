@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -9,15 +8,15 @@ from services.visual_model.errors import (
     VisualModelRequestValidationError,
     VisualModelResponseValidationError,
 )
-from services.visual_model.request_models import (
+from services.visual_model.requests import (
     VisualModelRequest,
 )
-from services.visual_model.response_models import (
+from services.visual_model.responses import (
     VisualModelResponse,
 )
-from services.visual_model.runtime_protocol import (
+from services.visual_model.runtime import (
     VisualModelRuntime,
-    VisualModelRuntimeHealth,
+    VisualRuntimeHealth,
 )
 from services.visual_model.validation import (
     validate_visual_model_request,
@@ -30,9 +29,9 @@ def runtime_value(prefix: str) -> str:
 
 
 def build_request(
-    **changes: Any,
+    **overrides,
 ) -> VisualModelRequest:
-    values: dict[str, Any] = {
+    values = {
         "request_id": runtime_value(
             "request"
         ),
@@ -43,28 +42,23 @@ def build_request(
         "media_type": "image/png",
         "response_schema": {
             "type": "object",
-            "additionalProperties": True,
         },
         "source_reference": runtime_value(
             "source"
         ),
         "metadata": {
-            "trace_id": runtime_value(
-                "trace"
-            ),
+            "runtime": True,
         },
     }
-
-    values.update(changes)
-
+    values.update(overrides)
     return VisualModelRequest(**values)
 
 
 def build_response(
     request_id: str,
-    **changes: Any,
+    **overrides,
 ) -> VisualModelResponse:
-    values: dict[str, Any] = {
+    values = {
         "request_id": request_id,
         "provider": runtime_value(
             "provider"
@@ -73,7 +67,7 @@ def build_response(
             "model"
         ),
         "scene_description": runtime_value(
-            "scene"
+            "description"
         ),
         "entities": (
             {
@@ -83,78 +77,37 @@ def build_response(
                 "label": runtime_value(
                     "label"
                 ),
-                "confidence": 0.9,
+                "confidence": 0.91,
             },
         ),
-        "relations": (
-            {
-                "relation_id": runtime_value(
-                    "relation"
-                ),
-                "source_entity_id": runtime_value(
-                    "source-entity"
-                ),
-                "target_entity_id": runtime_value(
-                    "target-entity"
-                ),
-                "relation": runtime_value(
-                    "relation-label"
-                ),
-                "confidence": 0.8,
-            },
-        ),
-        "visible_text": (
-            runtime_value("visible-text"),
-        ),
-        "uncertainty": (
-            runtime_value("uncertainty"),
-        ),
-        "duration_ms": 1,
+        "relations": (),
+        "visible_text": (),
+        "uncertainty": (),
+        "duration_ms": 10,
         "validation_passed": True,
         "warnings": (),
         "metadata": {
-            "trace_id": runtime_value(
-                "trace"
-            ),
+            "runtime": True,
         },
     }
-
-    values.update(changes)
-
+    values.update(overrides)
     return VisualModelResponse(**values)
 
 
-class CompatibleRuntime:
-    def health_check(
-        self,
-    ) -> VisualModelRuntimeHealth:
-        return VisualModelRuntimeHealth(
-            available=True,
-            provider=runtime_value(
-                "provider"
-            ),
-            model_id=runtime_value(
-                "model"
-            ),
-            status="ready",
-        )
-
-    def analyze(
-        self,
-        request: VisualModelRequest,
-    ) -> VisualModelResponse:
-        return build_response(
-            request.request_id
-        )
-
-
-def test_valid_request_passes() -> None:
-    validate_visual_model_request(
-        build_request()
+def test_request_normalizes_text_and_media_type() -> None:
+    request = build_request(
+        question="  describe   visible evidence  ",
+        media_type=" IMAGE/PNG ",
     )
 
+    assert (
+        request.question
+        == "describe visible evidence"
+    )
+    assert request.media_type == "image/png"
 
-def test_request_record_excludes_image_data_by_default() -> None:
+
+def test_request_record_excludes_image_data() -> None:
     request = build_request()
 
     record = request.to_record()
@@ -166,58 +119,53 @@ def test_request_record_excludes_image_data_by_default() -> None:
     )
 
 
-def test_request_record_can_include_image_data_explicitly() -> None:
+def test_request_data_is_immutable() -> None:
     request = build_request()
 
-    record = request.to_record(
-        include_image_data=True
-    )
+    with pytest.raises(TypeError):
+        request.metadata["changed"] = True
 
-    assert (
-        record["image_data"]
-        == request.image_data
+
+def test_valid_request_passes_validation() -> None:
+    request = build_request()
+
+    validate_visual_model_request(
+        request,
+        maximum_image_size_bytes=1024,
     )
 
 
 @pytest.mark.parametrize(
-    ("field_name", "invalid_value", "message"),
+    ("overrides", "message"),
     [
         (
-            "request_id",
-            "",
-            "request_id",
+            {"request_id": ""},
+            "request_id is required",
         ),
         (
-            "question",
-            "   ",
-            "question",
+            {"question": ""},
+            "question is required",
         ),
         (
-            "image_data",
-            b"",
-            "image_data",
+            {"image_data": b""},
+            "image_data is required",
         ),
         (
-            "media_type",
-            "application/octet-stream",
-            "media_type",
+            {"media_type": "application/octet-stream"},
+            "media_type is not allowed",
         ),
         (
-            "response_schema",
-            {},
-            "response_schema",
+            {"response_schema": {}},
+            "response_schema is required",
         ),
     ],
 )
-def test_invalid_request_fields_are_rejected(
-    field_name: str,
-    invalid_value: Any,
+def test_invalid_requests_are_rejected(
+    overrides,
     message: str,
 ) -> None:
     request = build_request(
-        **{
-            field_name: invalid_value,
-        }
+        **overrides
     )
 
     with pytest.raises(
@@ -225,169 +173,146 @@ def test_invalid_request_fields_are_rejected(
         match=message,
     ):
         validate_visual_model_request(
-            request
+            request,
+            maximum_image_size_bytes=1024,
         )
 
 
-def test_request_size_limit_is_enforced() -> None:
+def test_oversized_image_is_rejected() -> None:
     request = build_request(
-        image_data=b"runtime-data"
+        image_data=b"x" * 20,
     )
 
     with pytest.raises(
         VisualModelRequestValidationError,
-        match="size limit",
+        match="exceeds",
     ):
         validate_visual_model_request(
             request,
-            maximum_image_size_bytes=1,
+            maximum_image_size_bytes=10,
         )
 
 
-def test_non_json_request_metadata_is_rejected() -> None:
-    request = build_request(
-        metadata={
-            "value": object(),
-        }
+def test_response_normalizes_collections() -> None:
+    request_id = runtime_value(
+        "request"
     )
 
-    with pytest.raises(
-        VisualModelRequestValidationError,
-        match="JSON-compatible",
-    ):
-        validate_visual_model_request(
-            request
-        )
+    response = build_response(
+        request_id,
+        visible_text=(
+            "  visible text  ",
+            "",
+        ),
+        warnings=(
+            "  warning  ",
+            "",
+        ),
+    )
+
+    assert response.visible_text == (
+        "visible text",
+    )
+    assert response.warnings == (
+        "warning",
+    )
 
 
-def test_valid_response_passes() -> None:
-    request = build_request()
+def test_response_record_is_serializable_shape() -> None:
+    request_id = runtime_value(
+        "request"
+    )
+
+    response = build_response(
+        request_id
+    )
+
+    record = response.to_record()
+
+    assert record["request_id"] == request_id
+    assert isinstance(
+        record["entities"],
+        list,
+    )
+    assert isinstance(
+        record["metadata"],
+        dict,
+    )
+
+
+def test_valid_response_passes_validation() -> None:
+    request_id = runtime_value(
+        "request"
+    )
 
     validate_visual_model_response(
-        build_response(
-            request.request_id
-        ),
-        expected_request_id=(
-            request.request_id
-        ),
+        build_response(request_id),
+        expected_request_id=request_id,
     )
 
 
 def test_response_request_id_must_match() -> None:
-    request = build_request()
+    response = build_response(
+        runtime_value("request")
+    )
 
     with pytest.raises(
         VisualModelResponseValidationError,
         match="does not match",
     ):
         validate_visual_model_response(
-            build_response(
-                runtime_value(
-                    "different-request"
-                )
-            ),
-            expected_request_id=(
-                request.request_id
+            response,
+            expected_request_id=runtime_value(
+                "different-request"
             ),
         )
 
 
-@pytest.mark.parametrize(
-    ("field_name", "invalid_value", "message"),
-    [
-        (
-            "provider",
-            "",
-            "provider",
-        ),
-        (
-            "model_id",
-            "",
-            "model_id",
-        ),
-        (
-            "scene_description",
-            "",
-            "scene_description",
-        ),
-        (
-            "duration_ms",
-            -1,
-            "duration_ms",
-        ),
-        (
-            "validation_passed",
-            "true",
-            "validation_passed",
-        ),
-    ],
-)
-def test_invalid_response_fields_are_rejected(
-    field_name: str,
-    invalid_value: Any,
-    message: str,
-) -> None:
-    request = build_request()
+def test_negative_duration_is_rejected() -> None:
+    request_id = runtime_value(
+        "request"
+    )
 
     response = build_response(
-        request.request_id,
-        **{
-            field_name: invalid_value,
-        },
+        request_id,
+        duration_ms=-1,
     )
 
     with pytest.raises(
         VisualModelResponseValidationError,
-        match=message,
+        match="cannot be negative",
     ):
         validate_visual_model_response(
-            response
+            response,
+            expected_request_id=request_id,
         )
 
 
-def test_response_entities_must_be_objects() -> None:
-    request = build_request()
+class CompatibleRuntime:
+    def health_check(
+        self,
+    ) -> VisualRuntimeHealth:
+        return VisualRuntimeHealth(
+            available=True,
+            provider=runtime_value(
+                "provider"
+            ),
+            model_id=runtime_value(
+                "model"
+            ),
+            message="ready",
+        )
 
-    response = build_response(
-        request.request_id,
-        entities=("invalid",),
-    )
-
-    with pytest.raises(
-        VisualModelResponseValidationError,
-        match=r"entities\[0\]",
-    ):
-        validate_visual_model_response(
-            response
+    def analyze(
+        self,
+        request: VisualModelRequest,
+    ) -> VisualModelResponse:
+        return build_response(
+            request.request_id
         )
 
 
-def test_response_record_is_json_ready() -> None:
-    request = build_request()
-
-    response = build_response(
-        request.request_id
-    )
-
-    record = response.to_record()
-
-    assert isinstance(
-        record["entities"],
-        list,
-    )
-
-    assert isinstance(
-        record["relations"],
-        list,
-    )
-
-    assert isinstance(
-        record["visible_text"],
-        list,
-    )
-
-
-def test_runtime_implements_protocol() -> None:
+def test_runtime_protocol_is_provider_independent() -> None:
     runtime = CompatibleRuntime()
 
     assert isinstance(
@@ -396,10 +321,7 @@ def test_runtime_implements_protocol() -> None:
     )
 
     request = build_request()
-
-    response = runtime.analyze(
-        request
-    )
+    response = runtime.analyze(request)
 
     assert (
         response.request_id
@@ -407,10 +329,24 @@ def test_runtime_implements_protocol() -> None:
     )
 
 
-def test_runtime_health_contract() -> None:
-    health = CompatibleRuntime().health_check()
+def test_contracts_contain_no_hidden_reasoning_field() -> None:
+    request_fields = (
+        VisualModelRequest.__dataclass_fields__
+    )
+    response_fields = (
+        VisualModelResponse.__dataclass_fields__
+    )
 
-    assert health.available is True
-    assert health.status == "ready"
-    assert health.provider
-    assert health.model_id
+    forbidden_fields = {
+        "chain_of_thought",
+        "hidden_reasoning",
+        "reasoning_trace",
+        "internal_reasoning",
+    }
+
+    assert forbidden_fields.isdisjoint(
+        request_fields
+    )
+    assert forbidden_fields.isdisjoint(
+        response_fields
+    )

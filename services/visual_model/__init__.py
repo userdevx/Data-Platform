@@ -1,19 +1,20 @@
+"""Provider-independent contracts for the private visual model service."""
+
 from services.visual_model.errors import (
-    VisualModelContractError,
     VisualModelRequestValidationError,
     VisualModelResponseValidationError,
     VisualModelRuntimeError,
-    VisualModelRuntimeUnavailableError,
+    VisualModelServiceError,
 )
-from services.visual_model.request_models import (
+from services.visual_model.requests import (
     VisualModelRequest,
 )
-from services.visual_model.response_models import (
+from services.visual_model.responses import (
     VisualModelResponse,
 )
-from services.visual_model.runtime_protocol import (
+from services.visual_model.runtime import (
     VisualModelRuntime,
-    VisualModelRuntimeHealth,
+    VisualRuntimeHealth,
 )
 from services.visual_model.validation import (
     validate_visual_model_request,
@@ -21,15 +22,14 @@ from services.visual_model.validation import (
 )
 
 __all__ = [
-    "VisualModelContractError",
     "VisualModelRequest",
     "VisualModelRequestValidationError",
     "VisualModelResponse",
     "VisualModelResponseValidationError",
     "VisualModelRuntime",
     "VisualModelRuntimeError",
-    "VisualModelRuntimeHealth",
-    "VisualModelRuntimeUnavailableError",
+    "VisualModelServiceError",
+    "VisualRuntimeHealth",
     "validate_visual_model_request",
     "validate_visual_model_response",
 ]
