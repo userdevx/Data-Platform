@@ -1,0 +1,12 @@
+{
+  "private_visual_runtime": {
+    "enabled": false,
+    "runtime_type": "private_visual_runtime",
+    "provider_name": "",
+    "model_id": "",
+    "model_path": "",
+    "maximum_output_tokens": 1024,
+    "initialization_timeout_seconds": 120,
+    "inference_timeout_seconds": 60
+  }
+}
