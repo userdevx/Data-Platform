@@ -1,5 +1,16 @@
-"""Provider-independent contracts for the private visual model service."""
+"""Provider-independent boundaries for the private visual model service."""
 
+from services.visual_model.backend_registry import (
+    PrivateVisualBackendFactory,
+    PrivateVisualBackendRegistry,
+)
+from services.visual_model.bootstrap import (
+    VisualModelBootstrapConfiguration,
+    VisualModelServiceAssembly,
+    assemble_visual_model_service,
+    load_visual_model_bootstrap_configuration,
+    validate_visual_model_bootstrap_configuration,
+)
 from services.visual_model.config import (
     VisualModelServiceConfiguration,
     load_visual_model_service_configuration,
@@ -9,6 +20,8 @@ from services.visual_model.coordinator import (
     VisualModelCoordinator,
 )
 from services.visual_model.errors import (
+    VisualModelBackendRegistrationError,
+    VisualModelBootstrapError,
     VisualModelRequestValidationError,
     VisualModelResponseValidationError,
     VisualModelRuntimeError,
@@ -38,7 +51,6 @@ from services.visual_model.runtime import (
     VisualRuntimeHealth,
 )
 from services.visual_model.runtime_factory import (
-    PrivateVisualBackendFactory,
     build_visual_model_runtime,
 )
 from services.visual_model.serialization import (
@@ -66,13 +78,18 @@ from services.visual_model.validation import (
     validate_visual_model_response,
 )
 
+
 __all__ = [
     "PRIVATE_VISUAL_RUNTIME_TYPE",
     "PrivateVisualBackend",
     "PrivateVisualBackendFactory",
+    "PrivateVisualBackendRegistry",
     "PrivateVisualBackendResult",
     "PrivateVisualRuntime",
     "PrivateVisualRuntimeConfiguration",
+    "VisualModelBackendRegistrationError",
+    "VisualModelBootstrapConfiguration",
+    "VisualModelBootstrapError",
     "VisualModelCoordinator",
     "VisualModelRequest",
     "VisualModelRequestValidationError",
@@ -82,12 +99,14 @@ __all__ = [
     "VisualModelRuntimeError",
     "VisualModelSerializationError",
     "VisualModelService",
+    "VisualModelServiceAssembly",
     "VisualModelServiceConfiguration",
     "VisualModelServiceError",
     "VisualModelServiceResponse",
     "VisualModelTransportConfiguration",
     "VisualModelTransportError",
     "VisualRuntimeHealth",
+    "assemble_visual_model_service",
     "build_http_server",
     "build_visual_model_runtime",
     "decode_json_payload",
@@ -95,6 +114,7 @@ __all__ = [
     "health_from_mapping",
     "health_to_mapping",
     "load_private_visual_runtime_configuration",
+    "load_visual_model_bootstrap_configuration",
     "load_visual_model_service_configuration",
     "request_from_mapping",
     "request_to_mapping",
@@ -103,6 +123,7 @@ __all__ = [
     "serve_forever",
     "validate_private_visual_runtime_configuration",
     "validate_transport_configuration",
+    "validate_visual_model_bootstrap_configuration",
     "validate_visual_model_request",
     "validate_visual_model_response",
     "validate_visual_model_service_configuration",

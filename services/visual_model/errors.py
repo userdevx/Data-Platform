@@ -36,3 +36,16 @@ class VisualModelTransportError(
     VisualModelServiceError
 ):
     """Raised when the private transport boundary fails."""
+
+
+class VisualModelBackendRegistrationError(
+    VisualModelServiceError,
+    ValueError,
+):
+    """Raised when a visual backend registration is invalid."""
+
+
+class VisualModelBootstrapError(
+    VisualModelServiceError
+):
+    """Raised when the private visual service cannot be assembled."""

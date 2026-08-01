@@ -1,0 +1,20 @@
+{
+  "visual_model_service": {
+    "enabled": false,
+    "maximum_image_size_bytes": 15728640,
+    "allowed_media_types": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ],
+    "require_healthy_runtime": true
+  },
+  "visual_model_transport": {
+    "backend_name": "",
+    "host": "127.0.0.1",
+    "port": 8765,
+    "service_path": "/v1/visual",
+    "maximum_request_payload_size_bytes": 26214400,
+    "maximum_response_payload_size_bytes": 10485760
+  }
+}
