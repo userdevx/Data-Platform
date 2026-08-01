@@ -1,0 +1,11 @@
+{
+  "visual_backend": {
+    "enabled": false,
+    "backend_name": "local_process_visual_backend",
+    "executable_path": "",
+    "arguments": [],
+    "working_directory": "",
+    "environment": {},
+    "maximum_response_size_bytes": 10485760
+  }
+}

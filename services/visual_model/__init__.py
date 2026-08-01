@@ -1,5 +1,12 @@
 """Provider-independent boundaries for the private visual model service."""
 
+from services.visual_model.backend_registration import (
+    LOCAL_PROCESS_VISUAL_BACKEND_NAME,
+    VisualBackendRegistrationConfiguration,
+    load_backend_registration_configuration,
+    register_configured_visual_backend,
+    validate_backend_registration_configuration,
+)
 from services.visual_model.backend_registry import (
     PrivateVisualBackendFactory,
     PrivateVisualBackendRegistry,
@@ -28,6 +35,11 @@ from services.visual_model.errors import (
     VisualModelSerializationError,
     VisualModelServiceError,
     VisualModelTransportError,
+)
+from services.visual_model.providers.local_process_backend import (
+    LocalProcessVisualBackend,
+    LocalProcessVisualBackendConfiguration,
+    validate_local_process_backend_configuration,
 )
 from services.visual_model.providers.private_runtime import (
     PrivateVisualBackend,
@@ -80,6 +92,9 @@ from services.visual_model.validation import (
 
 
 __all__ = [
+    "LOCAL_PROCESS_VISUAL_BACKEND_NAME",
+    "LocalProcessVisualBackend",
+    "LocalProcessVisualBackendConfiguration",
     "PRIVATE_VISUAL_RUNTIME_TYPE",
     "PrivateVisualBackend",
     "PrivateVisualBackendFactory",
@@ -127,4 +142,9 @@ __all__ = [
     "validate_visual_model_request",
     "validate_visual_model_response",
     "validate_visual_model_service_configuration",
+    "VisualBackendRegistrationConfiguration",
+    "load_backend_registration_configuration",
+    "register_configured_visual_backend",
+    "validate_backend_registration_configuration",
+    "validate_local_process_backend_configuration",
 ]

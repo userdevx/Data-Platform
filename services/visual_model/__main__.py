@@ -4,13 +4,19 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
+from services.visual_model.backend_registration import (
+    load_backend_registration_configuration,
+    register_configured_visual_backend,
+)
 from services.visual_model.backend_registry import (
     PrivateVisualBackendRegistry,
 )
 from services.visual_model.bootstrap import (
     DEFAULT_RUNTIME_CONFIGURATION_PATH,
     DEFAULT_SERVICE_CONFIGURATION_PATH,
+    VisualModelServiceAssembly,
     assemble_visual_model_service,
 )
 from services.visual_model.errors import (
@@ -18,6 +24,18 @@ from services.visual_model.errors import (
 )
 from services.visual_model.transport import (
     serve_forever,
+)
+
+
+PROJECT_ROOT = Path(
+    __file__
+).resolve().parents[2]
+
+DEFAULT_BACKEND_CONFIGURATION_PATH = (
+    PROJECT_ROOT
+    / "config"
+    / "visual_model"
+    / "backend.json"
 )
 
 
@@ -50,17 +68,39 @@ def parse_arguments() -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--backend-configuration",
+        default=str(
+            DEFAULT_BACKEND_CONFIGURATION_PATH
+        ),
+    )
+
     return parser.parse_args()
 
 
 def build_backend_registry(
+    *,
+    backend_configuration_path: Path,
 ) -> PrivateVisualBackendRegistry:
-    return PrivateVisualBackendRegistry()
+    registry = PrivateVisualBackendRegistry()
+
+    configuration = (
+        load_backend_registration_configuration(
+            backend_configuration_path
+        )
+    )
+
+    register_configured_visual_backend(
+        registry=registry,
+        configuration=configuration,
+    )
+
+    return registry
 
 
 def status_record(
-    assembly,
-) -> dict:
+    assembly: VisualModelServiceAssembly,
+) -> dict[str, Any]:
     health = assembly.coordinator.health_check()
 
     return {
@@ -122,9 +162,17 @@ def main() -> int:
         arguments.service_configuration
     ).expanduser().resolve()
 
-    registry = build_backend_registry()
+    backend_configuration_path = Path(
+        arguments.backend_configuration
+    ).expanduser().resolve()
 
     try:
+        registry = build_backend_registry(
+            backend_configuration_path=(
+                backend_configuration_path
+            )
+        )
+
         assembly = assemble_visual_model_service(
             backend_registry=registry,
             runtime_configuration_path=(
@@ -136,13 +184,9 @@ def main() -> int:
         )
 
         if arguments.command == "status":
-            result = status_record(
-                assembly
-            )
-
             print(
                 json.dumps(
-                    result,
+                    status_record(assembly),
                     ensure_ascii=False,
                 )
             )
@@ -159,7 +203,12 @@ def main() -> int:
 
         return 0
 
-    except VisualModelServiceError as error:
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        VisualModelServiceError,
+    ) as error:
         print(
             json.dumps(
                 {
