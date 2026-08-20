@@ -41,3 +41,568 @@ body {
 .app-content {
   min-height: calc(100vh - 42px);
 }
+
+.app-overflow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.app-overflow-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(30, 64, 175, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #1f3f72;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 2px;
+  transition:
+    transform 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.app-overflow-button:hover {
+  background: #ffffff;
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.app-overflow-button:active {
+  transform: scale(0.96);
+}
+
+.app-overflow-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 220px;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(18px);
+  z-index: 1000;
+}
+
+.app-overflow-item {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: transparent;
+  color: #18243a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.app-overflow-item:hover {
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.app-overflow-item:active {
+  transform: scale(0.985);
+}
+
+.app-overflow-check {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-overflow-divider {
+  height: 1px;
+  margin: 7px 8px;
+  background: rgba(15, 23, 42, 0.1);
+}
+
+.configuration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(6px);
+}
+
+.configuration-panel {
+  width: min(430px, 100%);
+  height: 100%;
+  background: rgba(250, 252, 255, 0.98);
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow:
+    -24px 0 60px rgba(15, 23, 42, 0.12);
+  animation:
+    configuration-panel-enter
+    180ms ease-out;
+}
+
+.configuration-panel-header {
+  min-height: 82px;
+  padding: 20px 22px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.configuration-panel-header h2 {
+  margin: 2px 0 0;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.configuration-panel-eyebrow {
+  margin: 0;
+  color: rgba(30, 41, 59, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.configuration-close-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.configuration-panel-body {
+  padding: 24px 22px;
+}
+
+.configuration-panel-body h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.configuration-panel-body p {
+  margin: 0;
+  color: rgba(30, 41, 59, 0.68);
+  line-height: 1.55;
+}
+
+@keyframes configuration-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-overflow-menu {
+    width: 200px;
+  }
+
+  .configuration-panel {
+    width: 100%;
+  }
+}
+
+.memory-settings {
+  display: grid;
+  gap: 18px;
+}
+
+.memory-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.memory-setting-copy {
+  min-width: 0;
+}
+
+.memory-setting-copy h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+}
+
+.memory-setting-copy p {
+  margin: 0;
+  max-width: 290px;
+  color: rgba(30, 41, 59, 0.66);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-toggle {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.memory-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.memory-toggle-track {
+  width: 46px;
+  height: 26px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.28);
+  display: flex;
+  align-items: center;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.memory-toggle-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow:
+    0 2px 6px rgba(15, 23, 42, 0.18);
+  transform: translateX(0);
+  transition:
+    transform 160ms ease;
+}
+
+.memory-toggle-enabled .memory-toggle-track {
+  background: #2563eb;
+}
+
+.memory-toggle-enabled .memory-toggle-thumb {
+  transform: translateX(20px);
+}
+
+.memory-toggle:focus-visible .memory-toggle-track {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.memory-settings-summary {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.memory-settings-summary > div {
+  min-height: 46px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.memory-settings-summary span {
+  color: rgba(30, 41, 59, 0.7);
+  font-size: 13px;
+}
+
+.memory-settings-summary strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.configuration-status,
+.configuration-success,
+.configuration-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.configuration-status {
+  background: rgba(59, 130, 246, 0.07);
+  color: rgba(30, 64, 175, 0.86);
+}
+
+.configuration-success {
+  background: rgba(22, 163, 74, 0.08);
+  color: #166534;
+}
+
+.configuration-error {
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+}
+
+@media (max-width: 640px) {
+  .memory-setting-row {
+    align-items: flex-start;
+  }
+}
+
+.personalization-settings {
+  display: grid;
+  gap: 18px;
+}
+
+.configuration-field {
+  display: grid;
+  gap: 8px;
+}
+
+.configuration-field label {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.configuration-field input,
+.configuration-field textarea {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #172033;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.configuration-field input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.configuration-field textarea {
+  min-height: 120px;
+  padding: 11px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.configuration-field input:focus,
+.configuration-field textarea:focus {
+  border-color: rgba(37, 99, 235, 0.48);
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.configuration-field input:disabled,
+.configuration-field textarea:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.configuration-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.configuration-save-button {
+  min-width: 92px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 16px;
+  background: #2563eb;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
+}
+
+.configuration-save-button:hover:not(:disabled) {
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.2);
+}
+
+.configuration-save-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.configuration-save-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.permission-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.permission-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.permission-setting-copy {
+  min-width: 0;
+}
+
+.permission-setting-copy h3 {
+  margin: 0 0 5px;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.permission-setting-copy p {
+  margin: 0;
+  max-width: 300px;
+  color: rgba(30, 41, 59, 0.64);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .permission-setting-row {
+    align-items: flex-start;
+  }
+}
+
+/* System Details uses the existing platform status component
+   inside the narrow configuration panel. */
+.system-details-settings {
+  width: 100%;
+  min-width: 0;
+}
+
+.system-details-settings .metric-grid,
+.system-details-settings .metric-grid-clean {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.system-details-settings .metric-card,
+.system-details-settings .metric-card-clean {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.system-details-settings .metric-card > div,
+.system-details-settings .metric-card-clean > div {
+  min-width: 0;
+}
+
+.system-details-settings .metric-card p,
+.system-details-settings .metric-card strong,
+.system-details-settings .metric-card small {
+  overflow-wrap: anywhere;
+}
+
+/* Compact System Details list */
+.system-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.system-detail-row {
+  display: grid;
+  grid-template-columns:
+    10px
+    minmax(0, 1fr)
+    auto
+    auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.system-detail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #16a34a;
+}
+
+.system-detail-name {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.system-detail-value {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.system-detail-status {
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .system-detail-row {
+    grid-template-columns:
+      10px
+      minmax(0, 1fr)
+      auto;
+  }
+
+  .system-detail-status {
+    grid-column: 2 / -1;
+  }
+}

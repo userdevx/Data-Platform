@@ -151,6 +151,132 @@ export async function getIntelligenceDefinition(
   return JSON.parse(raw) as IntelligenceDefinition;
 }
 
-export async function getDataPlatformRoot(): Promise<string> {
-  return invoke<string>("get_data_platform_root");
+export async function getApplicationRoot(): Promise<string> {
+  return invoke<string>("get_application_root");
+}
+
+export type MemorySettings = {
+  enabled: boolean;
+  read: boolean;
+  write: boolean;
+  automatic_recall: boolean;
+};
+
+export async function updateMemorySettings(
+  settings: MemorySettings,
+  definition: string = DEFAULT_INTELLIGENCE_DEFINITION,
+): Promise<MemorySettings> {
+  const raw = await invoke<string>(
+    "update_memory_settings",
+    {
+      definition,
+      enabled: settings.enabled,
+      read: settings.read,
+      write: settings.write,
+      automaticRecall:
+        settings.automatic_recall,
+    },
+  );
+
+  const payload = JSON.parse(raw) as {
+    status?: string;
+    memory?: MemorySettings;
+  };
+
+  if (
+    payload.status !== "success"
+    || !payload.memory
+  ) {
+    throw new Error(
+      "Memory settings could not be updated.",
+    );
+  }
+
+  return payload.memory;
+}
+
+export type PersonalizationSettings = {
+  display_name: string;
+  role: string;
+  description: string;
+};
+
+export async function updatePersonalizationSettings(
+  settings: PersonalizationSettings,
+  definition: string = DEFAULT_INTELLIGENCE_DEFINITION,
+): Promise<PersonalizationSettings> {
+  const raw = await invoke<string>(
+    "update_personalization_settings",
+    {
+      definition,
+      displayName: settings.display_name,
+      role: settings.role,
+      description: settings.description,
+    },
+  );
+
+  const payload = JSON.parse(raw) as {
+    status?: string;
+    personalization?: PersonalizationSettings;
+  };
+
+  if (
+    payload.status !== "success"
+    || !payload.personalization
+  ) {
+    throw new Error(
+      "Personalization settings could not be updated.",
+    );
+  }
+
+  return payload.personalization;
+}
+
+export type PermissionSettings = {
+  read_records: boolean;
+  write_records: boolean;
+  write_history: boolean;
+  run_approved_commands: boolean;
+  network_access: boolean;
+  modify_system_files: boolean;
+};
+
+export async function updatePermissionSettings(
+  settings: PermissionSettings,
+  definition: string = DEFAULT_INTELLIGENCE_DEFINITION,
+): Promise<PermissionSettings> {
+  const raw = await invoke<string>(
+    "update_permission_settings",
+    {
+      definition,
+      readRecords:
+        settings.read_records,
+      writeRecords:
+        settings.write_records,
+      writeHistory:
+        settings.write_history,
+      runApprovedCommands:
+        settings.run_approved_commands,
+      networkAccess:
+        settings.network_access,
+      modifySystemFiles:
+        settings.modify_system_files,
+    },
+  );
+
+  const payload = JSON.parse(raw) as {
+    status?: string;
+    permissions?: PermissionSettings;
+  };
+
+  if (
+    payload.status !== "success"
+    || !payload.permissions
+  ) {
+    throw new Error(
+      "Permission settings could not be updated.",
+    );
+  }
+
+  return payload.permissions;
 }

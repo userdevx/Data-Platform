@@ -20,7 +20,7 @@ export default function IntelligenceOutputPanel({
     <section className="panel output-panel">
       <div className="output-header">
         <h2>
-          Output / System Log
+          Activity
         </h2>
 
         <button
@@ -28,7 +28,7 @@ export default function IntelligenceOutputPanel({
           className="ghost-button"
           onClick={onClear}
         >
-          Clear Log
+          Clear
         </button>
       </div>
 
@@ -61,7 +61,7 @@ export default function IntelligenceOutputPanel({
         </div>
       ) : (
         <p className="empty-log">
-          No log entries.
+          No activity yet.
         </p>
       )}
     </section>

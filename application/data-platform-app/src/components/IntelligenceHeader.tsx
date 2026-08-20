@@ -22,9 +22,7 @@ export default function IntelligenceHeader({
         </h1>
 
         <p className="page-subtitle">
-          Ask one question. Select automatic
-          routing, a local model, or an
-          available cloud model.
+          Ask, search, and understand your data.
         </p>
       </div>
 

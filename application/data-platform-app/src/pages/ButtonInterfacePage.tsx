@@ -10,7 +10,6 @@ import IntelligenceAskPanel from "../components/IntelligenceAskPanel";
 import IntelligenceResponsePanel from "../components/IntelligenceResponsePanel";
 import IntelligenceOutputPanel from "../components/IntelligenceOutputPanel";
 
-import PlatformStatusStrip from "../components/PlatformStatusStrip";
 
 import {
   getIntelligenceDefinition,
@@ -414,8 +413,6 @@ export default function ButtonInterfacePage() {
           )
         }
       />
-
-      <PlatformStatusStrip />
 
       <section className="main-grid">
         <IntelligenceAskPanel

@@ -36,4 +36,7 @@ export type EngineStatus = {
   status: string;
   record_count: number;
   records_path: string;
+  connected_sources: number;
+  definition_status: string;
+  validation_status: string;
 };
