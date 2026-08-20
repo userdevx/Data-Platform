@@ -1,5 +1,7 @@
 mod developer_terminal;
 mod intelligence_bridge;
+mod model_bridge;
+mod visual_bridge;
 
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -1612,6 +1614,9 @@ pub fn run() {
             query_records,
             intelligence_bridge::process_intelligence_request,
             intelligence_bridge::get_intelligence_definition,
+            model_bridge::get_model_options,
+            model_bridge::process_manual_model_request,
+            model_bridge::cancel_manual_model_request,
             intelligence_bridge::get_data_platform_root,
             update_data_platform,
             get_user_locations,
@@ -1625,7 +1630,9 @@ pub fn run() {
             read_agent_output,
             read_agent_log,
             developer_terminal::get_developer_terminal_context,
-            developer_terminal::run_developer_terminal_command
+            developer_terminal::run_developer_terminal_command,
+            visual_bridge::get_visual_runtime_status,
+            visual_bridge::analyze_visual_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

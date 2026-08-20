@@ -1,0 +1,108 @@
+{
+  "visual_model_registry": {
+    "enabled": true,
+    "selection_policy": {
+      "prefer_local": true,
+      "allow_cloud_fallback": true,
+      "require_runtime_health_check": true,
+      "maximum_attempts": 2
+    },
+    "providers": [
+      {
+        "provider_id": "local-visual-runtime",
+        "adapter_type": "ollama",
+        "processing_location": "local",
+        "enabled": true,
+        "endpoint": "http://127.0.0.1:11434",
+        "credential_reference": "",
+        "discovery_path": "",
+        "health_path": "",
+        "analyze_path": "",
+        "timeout_seconds": 30,
+        "headers": {},
+        "models": [
+          {
+            "model_id": "llama3.2:3b",
+            "capabilities": [
+              "text_input"
+            ],
+            "status": "unknown",
+            "supports_structured_output": false,
+            "enabled": true,
+            "priority": 100,
+            "license_identifier": "",
+            "metadata": {
+              "selection_source": "ollama_runtime_discovery"
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "openai-cloud",
+        "adapter_type": "openai_responses",
+        "processing_location": "cloud",
+        "enabled": true,
+        "endpoint": "https://api.openai.com",
+        "credential_reference": "OPENAI_API_KEY",
+        "discovery_path": "/v1/models",
+        "health_path": "/v1/models/{model_id}",
+        "analyze_path": "/v1/responses",
+        "timeout_seconds": 90,
+        "headers": {},
+        "models": [
+          {
+            "model_id": "gpt-4.1-mini",
+            "capabilities": [
+              "text_input",
+              "image_input",
+              "ocr",
+              "visual_question_answering",
+              "structured_output"
+            ],
+            "status": "unknown",
+            "supports_structured_output": true,
+            "enabled": true,
+            "priority": 20,
+            "license_identifier": "",
+            "metadata": {
+              "selection_source": "verified_environment",
+              "default": true
+            }
+          }
+        ]
+      },
+      {
+        "provider_id": "huggingface-cloud",
+        "adapter_type": "huggingface_inference",
+        "processing_location": "cloud",
+        "enabled": true,
+        "endpoint": "https://huggingface.co",
+        "credential_reference": "HF_TOKEN",
+        "discovery_path": "",
+        "health_path": "",
+        "analyze_path": "",
+        "timeout_seconds": 60,
+        "headers": {},
+        "models": [
+          {
+            "model_id": "configured-semantic-similarity-model",
+            "capabilities": [
+              "semantic_similarity"
+            ],
+            "status": "unknown",
+            "supports_structured_output": false,
+            "enabled": true,
+            "priority": 80,
+            "license_identifier": "",
+            "metadata": {
+              "selection_source": "environment",
+              "model_id_environment": "HF_SIMILARITY_MODEL_ID",
+              "task": "sentence-similarity",
+              "inference_provider": "hf-inference"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

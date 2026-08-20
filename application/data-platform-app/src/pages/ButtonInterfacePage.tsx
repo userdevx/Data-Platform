@@ -1,14 +1,52 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+
+import IntelligenceHeader from "../components/IntelligenceHeader";
+import IntelligenceAskPanel from "../components/IntelligenceAskPanel";
+import IntelligenceResponsePanel from "../components/IntelligenceResponsePanel";
+import IntelligenceOutputPanel from "../components/IntelligenceOutputPanel";
+
+import PlatformStatusStrip from "../components/PlatformStatusStrip";
+
 import {
   getIntelligenceDefinition,
   processNaturalIntelligenceRequest,
   type NaturalIntelligenceResponse,
 } from "../bridge/intelligenceBridge";
+import {
+  cancelManualModelRequest,
+  getModelOptions,
+  processManualModelRequest,
+  type ModelOption,
+} from "../bridge/modelBridge";
+import {
+  executeModelRequest,
+} from "../model/executeModelRequest";
+import {
+  requireSelectedModel,
+  validateRequestSubmission,
+} from "../model/requestValidation";
+import {
+  createRequestSubmittedEvent,
+} from "../model/modelRequestLifecycle";
+
+import {
+  useModelSelection,
+} from "../model/useModelSelection";
+
 import { intelligenceConfig } from "../config/intelligenceConfig";
+
 import "../styles/intelligencePage.css";
 
-type RuntimeStatus = "ready" | "thinking" | "success" | "error";
+type RuntimeStatus =
+  | "ready"
+  | "thinking"
+  | "success"
+  | "error";
 
 type SystemLogItem = {
   id: string;
@@ -18,11 +56,14 @@ type SystemLogItem = {
 };
 
 function getTimeLabel(): string {
-  return new Date().toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return new Date().toLocaleTimeString(
+    [],
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    },
+  );
 }
 
 function createLog(
@@ -37,7 +78,9 @@ function createLog(
   };
 }
 
-function getDisplayStatus(status: RuntimeStatus): string {
+function getDisplayStatus(
+  status: RuntimeStatus,
+): string {
   if (status === "thinking") {
     return "Working";
   }
@@ -46,50 +89,185 @@ function getDisplayStatus(status: RuntimeStatus): string {
     return "Needs attention";
   }
 
-  if (status === "success") {
-    return "Ready";
-  }
-
   return "Ready";
 }
 
+function getErrorMessage(
+  error: unknown,
+): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "The request could not be completed.";
+}
+
 export default function ButtonInterfacePage() {
-  const [requestText, setRequestText] = useState("");
-  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("ready");
-  const [response, setResponse] = useState<NaturalIntelligenceResponse | null>(
+  const [
+    requestText,
+    setRequestText,
+  ] = useState("");
+
+  const [
+    runtimeStatus,
+    setRuntimeStatus,
+  ] = useState<RuntimeStatus>("ready");
+
+  const [
+    response,
+    setResponse,
+  ] = useState<NaturalIntelligenceResponse | null>(
     null,
   );
-  const [errorMessage, setErrorMessage] = useState("");
-  const [displayName, setDisplayName] = useState(
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  const [
+    displayName,
+    setDisplayName,
+  ] = useState(
     intelligenceConfig.fallbackDisplayName,
   );
-  const [logs, setLogs] = useState<SystemLogItem[]>([]);
+
+  const [
+    logs,
+    setLogs,
+  ] = useState<SystemLogItem[]>([]);
+
+  const [
+    modelOptions,
+    setModelOptions,
+  ] = useState<ModelOption[]>([]);
+
+  const {
+    selectedModelId,
+    setSelectedModelId,
+    selectedModel,
+  } = useModelSelection(
+    modelOptions,
+  );
+
+  const [
+    modelsLoading,
+    setModelsLoading,
+  ] = useState(true);
+
+  const [
+    attachmentPaths,
+    setAttachmentPaths,
+  ] = useState<string[]>([]);
 
   useEffect(() => {
     let isActive = true;
 
     setLogs([
-      createLog("System initialized", "success"),
-      createLog("Data Engine connected", "success"),
-      createLog("Intelligence runtime ready", "success"),
+      createLog(
+        "System initialized",
+        "success",
+      ),
+      createLog(
+        "Data Engine connected",
+        "success",
+      ),
+      createLog(
+        "Intelligence runtime ready",
+        "success",
+      ),
     ]);
 
-    void getIntelligenceDefinition(intelligenceConfig.definitionPath)
+    void getIntelligenceDefinition(
+      intelligenceConfig.definitionPath,
+    )
       .then((definition) => {
         if (!isActive) {
           return;
         }
 
-        const activeName =
-          definition.identity?.display_name ||
-          definition.identity?.name ||
-          intelligenceConfig.fallbackDisplayName;
+        const configuredName =
+          definition.identity?.display_name
+          || definition.identity?.name
+          || intelligenceConfig
+            .fallbackDisplayName;
 
-        setDisplayName(activeName);
+        setDisplayName(configuredName);
       })
       .catch(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setDisplayName(
+          intelligenceConfig.fallbackDisplayName,
+        );
+      });
+
+    void getModelOptions()
+      .then((result) => {
+        if (!isActive) {
+          return;
+        }
+
+        if (result.status !== "success") {
+          throw new Error(
+            result.errors[0]
+            ?? "Models could not be loaded.",
+          );
+        }
+
+        setModelOptions(result.models);
+
+        const initialModel =
+          result.models.find(
+            (model) =>
+              model.option_id === "automatic"
+              && model.available,
+          )
+          ?? result.models.find(
+            (model) => model.available,
+          );
+
+        setSelectedModelId(
+          initialModel?.option_id ?? "",
+        );
+
+        setLogs((current) => [
+          createLog(
+            `${result.models.filter(
+              (model) => model.available,
+            ).length} model options loaded`,
+            "success",
+          ),
+          ...current,
+        ]);
+      })
+      .catch((error: unknown) => {
+        if (!isActive) {
+          return;
+        }
+
+        const message =
+          getErrorMessage(error);
+
+        setErrorMessage(message);
+
+        setLogs((current) => [
+          createLog(
+            "Model discovery failed",
+            "error",
+          ),
+          ...current,
+        ]);
+      })
+      .finally(() => {
         if (isActive) {
-          setDisplayName(intelligenceConfig.fallbackDisplayName);
+          setModelsLoading(false);
         }
       });
 
@@ -98,270 +276,198 @@ export default function ButtonInterfacePage() {
     };
   }, []);
 
-  async function openExternalUrl(url: string) {
+  async function openExternalUrl(
+    url: string,
+  ): Promise<void> {
     if (!url.trim()) {
       return;
     }
 
     try {
       await openUrl(url);
+
       setLogs((current) => [
-        createLog("Opened source link", "success"),
+        createLog(
+          "Opened source link",
+          "success",
+        ),
         ...current,
-      ]);
+      ].slice(0, 100));
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Could not open the source link.";
+        getErrorMessage(error);
 
       setErrorMessage(message);
+
       setLogs((current) => [
-        createLog("Could not open source link", "error"),
+        createLog(
+          "Could not open source link",
+          "error",
+        ),
         ...current,
-      ]);
+      ].slice(0, 100));
     }
   }
 
-  async function handleAsk() {
-    const cleanRequest = requestText.trim();
-
-    if (!cleanRequest) {
-      setRuntimeStatus("error");
-      setErrorMessage("Enter a request first.");
-      setLogs((current) => [
-        createLog("Request rejected: empty input", "error"),
-        ...current,
-      ]);
+  async function handleAsk(): Promise<void> {
+    if (runtimeStatus === "thinking") {
       return;
     }
 
-    setRuntimeStatus("thinking");
-    setErrorMessage("");
-    setLogs((current) => [
-      createLog("Request submitted", "info"),
-      ...current,
-    ]);
+    const cleanRequest =
+      requestText.trim();
 
-    try {
-      const result = await processNaturalIntelligenceRequest(
-        cleanRequest,
-        intelligenceConfig.definitionPath,
+    const validationError =
+      validateRequestSubmission({
+        requestText,
+        attachmentPaths,
+        model: selectedModel,
+      });
+
+    if (validationError) {
+      setRuntimeStatus("error");
+
+      setErrorMessage(
+        validationError.message,
       );
 
-      setResponse(result);
-      setRuntimeStatus(result.status === "success" ? "success" : "error");
-
       setLogs((current) => [
-        createLog("Response received", "success"),
+        createLog(
+          validationError.logMessage,
+          "error",
+        ),
         ...current,
-      ]);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "The request could not be completed.";
+      ].slice(0, 100));
 
-      setRuntimeStatus("error");
-      setErrorMessage(message);
-
-      setLogs((current) => [
-        createLog("Runtime request failed", "error"),
-        ...current,
-      ]);
+      return;
     }
+
+    const activeModel =
+      requireSelectedModel(
+        selectedModel,
+      );
+
+    setRuntimeStatus("thinking");
+    setErrorMessage("");
+
+    const submittedEvent =
+      createRequestSubmittedEvent(
+        activeModel.display_name,
+      );
+
+    setLogs((current) => [
+      createLog(
+        submittedEvent.message,
+        submittedEvent.level,
+      ),
+      ...current,
+    ].slice(0, 100));
+
+    const execution =
+      await executeModelRequest({
+        request: cleanRequest,
+        model: activeModel,
+        definitionPath:
+          intelligenceConfig.definitionPath,
+      });
+
+    if (
+      execution.status
+      === "success"
+    ) {
+      setResponse(
+        execution.response,
+      );
+    } else {
+      setErrorMessage(
+        execution.errorMessage,
+      );
+    }
+
+    setLogs((current) => [
+      createLog(
+        execution.event.message,
+        execution.event.level,
+      ),
+      ...current,
+    ].slice(0, 100));
+
+    setRuntimeStatus("ready");
   }
 
-  function handleClearLog() {
+  function handleClearLog(): void {
     setLogs([]);
   }
 
   return (
     <main className="intelligence-page">
-      <section className="intelligence-header">
-        <div>
-          <p className="eyebrow">Data Platform</p>
-          <h1>{intelligenceConfig.pageTitle}</h1>
-          <p className="page-subtitle">
-            Ask one question. The system handles routing, memory, and response
-            generation behind the interface.
-          </p>
-        </div>
+      <IntelligenceHeader
+        title={
+          intelligenceConfig.pageTitle
+        }
+        runtimeStatus={
+          runtimeStatus
+        }
+        statusLabel={
+          getDisplayStatus(
+            runtimeStatus,
+          )
+        }
+      />
 
-        <div className={`compact-runtime-status status-${runtimeStatus}`}>
-          <span className="status-dot" />
-          <span>{getDisplayStatus(runtimeStatus)}</span>
-        </div>
-      </section>
-
-      <section className="metric-grid metric-grid-clean" aria-label="Platform status">
-        <article className="metric-card metric-card-clean">
-          <div>
-            <p>Sources</p>
-            <strong>1</strong>
-            <small>Connected</small>
-          </div>
-        </article>
-
-        <article className="metric-card metric-card-clean">
-          <div>
-            <p>Raw Records</p>
-            <strong>1</strong>
-            <small>Ready</small>
-          </div>
-        </article>
-
-        <article className="metric-card metric-card-clean">
-          <div>
-            <p>Definitions</p>
-            <strong>Active</strong>
-            <small>Ready</small>
-          </div>
-        </article>
-
-        <article className="metric-card metric-card-clean">
-          <div>
-            <p>Validation</p>
-            <strong>Enabled</strong>
-            <small>Ready</small>
-          </div>
-        </article>
-
-        <article className="metric-card metric-card-clean">
-          <div>
-            <p>Runtime</p>
-            <strong>Active</strong>
-            <small>Ready</small>
-          </div>
-        </article>
-      </section>
+      <PlatformStatusStrip />
 
       <section className="main-grid">
-        <article className="panel ask-panel">
-          <h2>Ask</h2>
+        <IntelligenceAskPanel
+          displayName={displayName}
+          modelOptions={modelOptions}
+          modelsLoading={modelsLoading}
+          selectedModelId={
+            selectedModelId
+          }
+          selectedModel={
+            selectedModel
+          }
+          requestText={
+            requestText
+          }
+          attachmentPaths={
+            attachmentPaths
+          }
+          runtimeStatus={
+            runtimeStatus
+          }
+          errorMessage={
+            errorMessage
+          }
+          onModelChange={
+            setSelectedModelId
+          }
+          onRequestChange={
+            setRequestText
+          }
+          onAttachmentChange={
+            setAttachmentPaths
+          }
+          onAsk={() => {
+            void handleAsk();
+          }}
+        />
 
-          <label className="field-label" htmlFor="model-select">
-            Model
-          </label>
-
-          <select id="model-select" className="model-select" value="ollama" disabled>
-            <option value="ollama">{intelligenceConfig.providerLabel}</option>
-          </select>
-
-          <label className="field-label" htmlFor="request-input">
-            Ask {displayName}
-          </label>
-
-          <textarea
-            id="request-input"
-            className="request-input"
-            placeholder={`Ask ${displayName}...`}
-            value={requestText}
-            onChange={(event) => setRequestText(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                void handleAsk();
-              }
-            }}
-          />
-
-          <div className="ask-actions">
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => void handleAsk()}
-              disabled={runtimeStatus === "thinking"}
-            >
-              {runtimeStatus === "thinking" ? "Working" : "Ask"}
-            </button>
-          </div>
-
-          {errorMessage ? (
-            <div className="error-box">{errorMessage}</div>
-          ) : null}
-        </article>
-
-        <article className="panel response-panel">
-          <h2>Response</h2>
-
-          {response ? (
-            <div className="natural-response natural-response-only">
-              <p>{response.answer}</p>
-
-              {response.results.length > 0 ? (
-                <section className="result-section">
-                  <div className="result-list">
-                    {response.results.map((item) => (
-                      <article className="result-card" key={item.url}>
-                        <strong>{item.title}</strong>
-                        <button
-                          type="button"
-                          className="result-url-button"
-                          onClick={() => {
-                            void openExternalUrl(item.url);
-                          }}
-                        >
-                          {item.url}
-                        </button>
-
-                        <div className="result-actions">
-                          <button
-                            type="button"
-                            className="result-action-button primary-result-action"
-                            onClick={() => {
-                              void openExternalUrl(item.url);
-                            }}
-                          >
-                            Open page ↗
-                          </button>
-
-                          <button
-                            type="button"
-                            className="result-action-button"
-                            onClick={() => {
-                              void openExternalUrl(item.url);
-                            }}
-                          >
-                            Learn more
-                          </button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          ) : (
-            <div className="empty-response">
-              <div className="empty-icon">◌</div>
-              <p>Enter a request to get started.</p>
-            </div>
-          )}
-        </article>
+        <IntelligenceResponsePanel
+          response={response}
+          onOpenUrl={
+            openExternalUrl
+          }
+        />
       </section>
 
-      <section className="panel output-panel">
-        <div className="output-header">
-          <h2>Output / System Log</h2>
-          <button type="button" className="ghost-button" onClick={handleClearLog}>
-            Clear Log
-          </button>
-        </div>
-
-        {logs.length > 0 ? (
-          <div className="log-list">
-            {logs.map((item) => (
-              <div className="log-row" key={item.id}>
-                <span className={`log-dot log-${item.status}`} />
-                <span>{item.message}</span>
-                <time>{item.time}</time>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="empty-log">No log entries.</p>
-        )}
-      </section>
+      <IntelligenceOutputPanel
+        logs={logs}
+        onClear={
+          handleClearLog
+        }
+      />
     </main>
   );
 }

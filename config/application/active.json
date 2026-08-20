@@ -1,0 +1,29 @@
+{
+  "definition_version": 1,
+  "identity": {
+    "display_name": "Data Platform",
+    "short_name": "",
+    "description": "Configurable information system",
+    "tagline": "Connect, process, store, query, and reason"
+  },
+  "interface": {
+    "window_title": "Data Platform",
+    "navigation_title": "Data Platform",
+    "home_heading": "Data Platform",
+    "loading_message": "Starting application",
+    "ready_message": "Application ready"
+  },
+  "branding": {
+    "logo_text": "DP",
+    "accent_name": "default"
+  },
+  "package": {
+    "executable_name": "application-runtime",
+    "package_name": "application-runtime",
+    "bundle_identifier": "org.application.runtime"
+  },
+  "metadata": {
+    "product_family": "information-system",
+    "configuration_status": "active"
+  }
+}

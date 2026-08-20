@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 
 from pathlib import Path
+from engine.application.automatic_model_request_action import (
+    process_automatic_model_request,
+)
 import json
 import re
 from datetime import datetime
@@ -530,72 +533,147 @@ class ModelReasoningCapability:
     name = "model_reasoning"
 
     def execute(self, request, instance) -> dict:
-        provider = instance.definition.provider
+        provider_policy = (
+            instance.definition.provider
+        )
 
-        if not provider.enabled:
+        if not provider_policy.enabled:
             return {
                 "capability": self.name,
                 "source": "provider",
                 "status": "disabled",
                 "answer": (
-                    "Model reasoning matched the request, but provider use "
-                    "is disabled in the active Intelligence Definition."
+                    "Model reasoning is disabled "
+                    "in the active Intelligence "
+                    "Definition."
                 ),
                 "data": {
-                    "action": "Provider disabled.",
-                    "explanation": "The active configuration does not allow model reasoning.",
-                    "next_step": "Enable a provider or route the request to a deterministic capability.",
-                    "provider": provider.name,
-                    "model": provider.model,
+                    "action": (
+                        "Provider use disabled."
+                    ),
+                    "explanation": (
+                        "Automatic model reasoning "
+                        "is disabled by policy."
+                    ),
+                    "next_step": (
+                        "Enable model provider use "
+                        "or use a deterministic "
+                        "capability."
+                    ),
                 },
             }
 
-        if provider.name != "ollama":
-            return {
-                "capability": self.name,
-                "source": "provider",
-                "status": "error",
-                "answer": "The configured provider is not supported by this runtime path yet.",
-                "data": {
-                    "provider": provider.name,
-                    "model": provider.model,
-                },
-                "errors": [f"Unsupported provider: {provider.name}"],
-            }
-
-        model = provider.model or "llama3.2:3b"
-
-        memory_context = build_memory_context_for_provider(
-            root=Path.cwd(),
-            definition=instance.definition,
-            question=request.question,
+        memory_context = (
+            build_memory_context_for_provider(
+                root=Path.cwd(),
+                definition=(
+                    instance.definition
+                ),
+                question=request.question,
+            )
         )
 
         memory_block = ""
+
         if memory_context:
             memory_block = (
-                "\n\nRelevant stored context from the Data Engine:\n"
+                "\n\nRelevant stored context "
+                "from the Data Engine:\n"
                 f"{memory_context}\n"
             )
 
         prompt = (
-            "Respond naturally to the user.\n"
-            "Use plain conversational language.\n"
-            "Do not use labels like Answer, Action, Explanation, or Next Step.\n"
-            "Do not expose backend routing, provider details, memory internals, or system internals.\n"
-            "Keep the response concise unless the user asks for detail.\n"
-            "For greetings, respond like a normal conversation.\n"
-            "Use relevant stored context only when it helps answer the request.\n"
+            "Answer the user's request directly.\n"
+            "Start with the information or result "
+            "the user requested.\n"
+            "Do not restate, repeat, summarize, "
+            "or paraphrase the user's request "
+            "before answering.\n"
+            "Do not begin with conversational "
+            "acknowledgements or introductory "
+            "filler.\n"
+            "Use natural, clear language.\n"
+            "Do not expose backend routing, "
+            "provider details, memory internals, "
+            "or system internals.\n"
+            "Keep the response concise unless "
+            "the user asks for detail.\n"
+            "Use relevant stored context only "
+            "when it materially helps answer "
+            "the request.\n"
             f"{memory_block}\n"
             f"User request: {request.question}"
         )
 
         try:
-            answer = self._ollama_api_generate(
-                model=model,
-                prompt=prompt,
-                timeout=90,
+            provider_result = (
+                process_automatic_model_request(
+                    question=prompt,
+                    required_capability=(
+                        "text_input"
+                    ),
+                )
             )
+
+            answer = str(
+                provider_result.get(
+                    "answer",
+                    "",
+                )
+            ).strip()
+
+            if not answer:
+                raise RuntimeError(
+                    "The selected model returned "
+                    "no answer."
+                )
+
+            raw = provider_result.get(
+                "raw",
+                {},
+            )
+
+            if not isinstance(
+                raw,
+                dict,
+            ):
+                raw = {}
+
+            provider_id = str(
+                raw.get(
+                    "provider_id",
+                    "",
+                )
+            )
+
+            model_id = str(
+                raw.get(
+                    "model_id",
+                    "",
+                )
+            )
+
+            provider_metadata = raw.get(
+                "metadata",
+                {},
+            )
+
+            if not isinstance(
+                provider_metadata,
+                dict,
+            ):
+                provider_metadata = {}
+
+            selection = raw.get(
+                "selection",
+                {},
+            )
+
+            if not isinstance(
+                selection,
+                dict,
+            ):
+                selection = {}
 
             return {
                 "capability": self.name,
@@ -603,14 +681,35 @@ class ModelReasoningCapability:
                 "status": "success",
                 "answer": answer,
                 "data": {
-                    "action": "Routed request to model reasoning.",
-                    "explanation": "The request required provider reasoning after deterministic routing.",
-                    "next_step": "Review the response or refine the request.",
-                    "provider": provider.name,
-                    "model": model,
-                    "provider_label": f"ollama:{model}",
-                    "execution": "ollama_api",
-                    "memory_context_used": bool(memory_context),
+                    "action": (
+                        "Automatically selected "
+                        "a compatible model."
+                    ),
+                    "explanation": (
+                        "The Intelligence Layer "
+                        "selected a model after "
+                        "deterministic routing."
+                    ),
+                    "next_step": (
+                        "Review the response or "
+                        "refine the request."
+                    ),
+                    "provider": provider_id,
+                    "model": model_id,
+                    "provider_label": (
+                        f"{provider_id}:"
+                        f"{model_id}"
+                    ),
+                    "execution": (
+                        "automatic_model_selection"
+                    ),
+                    "provider_metadata": (
+                        provider_metadata
+                    ),
+                    "selection": selection,
+                    "memory_context_used": (
+                        bool(memory_context)
+                    ),
                 },
                 "errors": [],
             }
@@ -620,17 +719,32 @@ class ModelReasoningCapability:
                 "capability": self.name,
                 "source": "model_provider",
                 "status": "error",
-                "answer": "The selected model provider could not complete the request.",
+                "answer": (
+                    "No compatible model could "
+                    "complete the request."
+                ),
                 "data": {
-                    "action": "Model provider request failed.",
-                    "explanation": "The provider did not return a successful response.",
-                    "next_step": "Try a shorter request or use a deterministic route.",
-                    "provider": provider.name,
-                    "model": model,
-                    "execution": "ollama_api",
+                    "action": (
+                        "Automatic model "
+                        "selection failed."
+                    ),
+                    "explanation": (
+                        "No compatible model "
+                        "completed the required "
+                        "capability."
+                    ),
+                    "next_step": (
+                        "Review provider health "
+                        "and model capabilities."
+                    ),
+                    "execution": (
+                        "automatic_model_selection"
+                    ),
                     "error": str(error),
                 },
-                "errors": [str(error)],
+                "errors": [
+                    str(error)
+                ],
             }
 
     def _ollama_api_generate(
