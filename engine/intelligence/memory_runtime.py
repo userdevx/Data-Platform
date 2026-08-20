@@ -80,6 +80,74 @@ def is_memory_enabled(definition: Any) -> bool:
     return True
 
 
+def is_memory_read_enabled(
+    definition: Any,
+) -> bool:
+    if not is_memory_enabled(definition):
+        return False
+
+    return bool(
+        get_definition_value(
+            definition,
+            "memory",
+            "read",
+            default=True,
+        )
+    )
+
+
+def is_memory_write_enabled(
+    definition: Any,
+) -> bool:
+    if not is_memory_enabled(definition):
+        return False
+
+    return bool(
+        get_definition_value(
+            definition,
+            "memory",
+            "write",
+            default=True,
+        )
+    )
+
+
+def is_memory_automatic_recall_enabled(
+    definition: Any,
+) -> bool:
+    if not is_memory_read_enabled(
+        definition
+    ):
+        return False
+
+    return bool(
+        get_definition_value(
+            definition,
+            "memory",
+            "automatic_recall",
+            default=True,
+        )
+    )
+
+
+def get_memory_context_budget(
+    definition: Any,
+) -> int:
+    value = get_definition_value(
+        definition,
+        "memory",
+        "context_budget",
+        default=1500,
+    )
+
+    try:
+        budget = int(value)
+    except (TypeError, ValueError):
+        return 1500
+
+    return max(0, budget)
+
+
 def get_memory_lookup_route(
     text: str,
     *,
@@ -198,6 +266,16 @@ def store_memory_candidates_from_definition(
             "rejected": [],
         }
 
+    if not is_memory_write_enabled(
+        definition
+    ):
+        return {
+            "memory_enabled": True,
+            "created": 0,
+            "deleted": 0,
+            "rejected": [],
+        }
+
     service = build_memory_service(root)
     extractor = RuleBasedMemoryExtractor()
 
@@ -256,7 +334,9 @@ def list_memory_records_from_definition(
     root: Path,
     definition: Any,
 ) -> list[dict[str, Any]]:
-    if not is_memory_enabled(definition):
+    if not is_memory_read_enabled(
+        definition
+    ):
         return []
 
     service = build_memory_service(root)
@@ -299,6 +379,28 @@ def process_memory_command_from_definition(
     )
 
     if lookup_route is not None:
+        if not is_memory_read_enabled(
+            definition
+        ):
+            return {
+                "mode": "lookup",
+                "created": 0,
+                "deleted": 0,
+                "rejected": [],
+                "memories": [],
+                "memory": None,
+                "predicate": lookup_route.predicate,
+                "namespace": lookup_route.namespace,
+                "subject": lookup_route.subject,
+                "value": None,
+                "memory_enabled": (
+                    is_memory_enabled(
+                        definition
+                    )
+                ),
+                "memory_read_enabled": False,
+            }
+
         service = build_memory_service(root)
 
         memory = service.get_active_memory(
@@ -385,7 +487,9 @@ def build_memory_context_for_provider(
     definition: Any,
     question: str,
 ) -> str:
-    if not is_memory_enabled(definition):
+    if not is_memory_automatic_recall_enabled(
+        definition
+    ):
         return ""
 
     service = build_memory_service(root)
@@ -394,6 +498,8 @@ def build_memory_context_for_provider(
         user_id=get_user_id(),
         intelligence_id=get_intelligence_id(definition),
         query=question,
-        token_budget=1500,
+        token_budget=get_memory_context_budget(
+            definition
+        ),
         limit=12,
     )

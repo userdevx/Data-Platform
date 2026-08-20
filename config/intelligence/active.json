@@ -1,21 +1,4 @@
 {
-  "version": "1.0.0",
-  "identity": {
-    "id": "default",
-    "name": "Intelligence",
-    "display_name": "Paige",
-    "role": "platform_intelligence",
-    "description": "The default configured intelligence instance for the Data Platform."
-  },
-  "tools": {
-    "enabled": [
-      "read_system_status",
-      "query_data_engine",
-      "search_knowledge",
-      "write_intelligence_history",
-      "public_source_search"
-    ]
-  },
   "abilities": {
     "enabled": [
       "identify_instance",
@@ -28,16 +11,56 @@
       "manage_memory"
     ]
   },
+  "data_engine": {
+    "allowed_operations": [
+      "query",
+      "count",
+      "status",
+      "search",
+      "append_history"
+    ],
+    "direct_storage_access": false,
+    "enabled": true
+  },
+  "identity": {
+    "description": "The default configured intelligence instance for the active application.",
+    "display_name": "Paige",
+    "id": "default",
+    "name": "Intelligence",
+    "role": "platform_intelligence"
+  },
+  "memory": {
+    "automatic_recall": true,
+    "context_budget": 1500,
+    "enabled": true,
+    "read": true,
+    "source": "data_engine",
+    "storage_owner": "data_engine",
+    "write": true
+  },
   "permissions": {
-    "read_records": true,
-    "write_records": false,
-    "write_history": true,
-    "run_approved_commands": false,
+    "modify_system_files": false,
     "network_access": true,
-    "modify_system_files": false
+    "read_records": true,
+    "run_approved_commands": false,
+    "write_history": true,
+    "write_records": false
+  },
+  "provider": {
+    "enabled": true,
+    "model": "llama3.2:3b",
+    "name": "ollama"
+  },
+  "response": {
+    "include_capability": true,
+    "include_data": true,
+    "include_instance_name": true,
+    "include_role": true,
+    "include_source": true,
+    "include_status": true
   },
   "routing": {
-    "strategy": "deterministic_first",
+    "fallback": "controlled_unknown",
     "priority": [
       "identity",
       "system_status",
@@ -48,51 +71,31 @@
       "memory_command",
       "model_reasoning"
     ],
-    "fallback": "controlled_unknown"
+    "strategy": "deterministic_first"
   },
-  "provider": {
-    "enabled": true,
-    "name": "ollama",
-    "model": "llama3.2:3b"
-  },
-  "data_engine": {
-    "enabled": true,
-    "direct_storage_access": false,
-    "allowed_operations": [
-      "query",
-      "count",
-      "status",
-      "search",
-      "append_history"
+  "tools": {
+    "enabled": [
+      "read_system_status",
+      "query_data_engine",
+      "search_knowledge",
+      "write_intelligence_history",
+      "public_source_search"
     ]
   },
-  "response": {
-    "include_instance_name": true,
-    "include_role": true,
-    "include_capability": true,
-    "include_source": true,
-    "include_status": true,
-    "include_data": true
-  },
   "validation": {
+    "blocked_response_phrases": [
+      "I can help you with",
+      "Hello. I'm",
+      "Hello. I’m",
+      "No reason returned",
+      "unknown source",
+      "context_source"
+    ],
     "enabled": true,
     "max_answer_chars": 4000,
     "require_answer": true,
     "require_source": true,
-    "require_structured_data": true,
-    "blocked_response_phrases": [
-      "I can help you with",
-      "Hello. I'm",
-      "Hello. I\u2019m",
-      "No reason returned",
-      "unknown source",
-      "context_source"
-    ]
+    "require_structured_data": true
   },
-  "memory": {
-    "enabled": true,
-    "source": "data_engine",
-    "storage_owner": "data_engine",
-    "context_budget": 1500
-  }
+  "version": "1.0.0"
 }

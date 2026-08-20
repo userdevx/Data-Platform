@@ -7,6 +7,7 @@ from engine.intelligence.models import (
     AbilitySettings,
     DataEngineSettings,
     IntelligenceDefinition,
+    MemorySettings,
     IntelligenceIdentity,
     PermissionSettings,
     ProviderSettings,
@@ -28,6 +29,7 @@ class IntelligenceDefinitionLoader:
 
         identity = raw["identity"]
         provider = raw.get("provider", {})
+        memory = raw.get("memory", {})
 
         return IntelligenceDefinition(
             version=str(raw["version"]),
@@ -68,6 +70,41 @@ class IntelligenceDefinitionLoader:
             ),
             response=ResponseSettings(
                 **raw.get("response", {})
+            ),
+            memory=MemorySettings(
+                enabled=bool(
+                    memory.get("enabled", True)
+                ),
+                read=bool(
+                    memory.get("read", True)
+                ),
+                write=bool(
+                    memory.get("write", True)
+                ),
+                automatic_recall=bool(
+                    memory.get(
+                        "automatic_recall",
+                        True,
+                    )
+                ),
+                source=str(
+                    memory.get(
+                        "source",
+                        "data_engine",
+                    )
+                ),
+                storage_owner=str(
+                    memory.get(
+                        "storage_owner",
+                        "data_engine",
+                    )
+                ),
+                context_budget=int(
+                    memory.get(
+                        "context_budget",
+                        1500,
+                    )
+                ),
             ),
             metadata=raw.get("metadata", {}),
         )

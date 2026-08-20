@@ -61,6 +61,17 @@ class DataEngineSettings:
 
 
 @dataclass(frozen=True)
+class MemorySettings:
+    enabled: bool = True
+    read: bool = True
+    write: bool = True
+    automatic_recall: bool = True
+    source: str = "data_engine"
+    storage_owner: str = "data_engine"
+    context_budget: int = 1500
+
+
+@dataclass(frozen=True)
 class ResponseSettings:
     include_instance_name: bool = True
     include_role: bool = True
@@ -81,6 +92,9 @@ class IntelligenceDefinition:
     provider: ProviderSettings
     data_engine: DataEngineSettings
     response: ResponseSettings
+    memory: MemorySettings = field(
+        default_factory=MemorySettings
+    )
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -52,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Source label for the request.",
     )
 
+    parser.add_argument(
+        "--conversation-id",
+        default="",
+        help="Stable identifier for the current conversation.",
+    )
+
     return parser
 
 
@@ -158,9 +164,17 @@ def main() -> int:
         factory = IntelligenceFactory(root=root)
         instance = factory.create(definition_path=definition_path)
 
+        request_metadata: dict[str, Any] = {}
+
+        if args.conversation_id.strip():
+            request_metadata["conversation_id"] = (
+                args.conversation_id.strip()
+            )
+
         request = IntelligenceRequest.create(
             question=question,
             source=args.source,
+            metadata=request_metadata,
         )
 
         response = instance.process(request)

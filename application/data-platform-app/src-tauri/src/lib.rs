@@ -81,6 +81,9 @@ struct EngineStatus {
     status: String,
     record_count: usize,
     records_path: String,
+    connected_sources: usize,
+    definition_status: String,
+    validation_status: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -102,7 +105,7 @@ fn timestamp() -> Result<u64, String> {
         .as_secs())
 }
 
-fn find_data_platform_root() -> Result<PathBuf, String> {
+fn find_application_root() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
     if let Ok(current) = std::env::current_dir() {
@@ -136,7 +139,7 @@ fn find_data_platform_root() -> Result<PathBuf, String> {
 }
 
 fn data_dir() -> Result<PathBuf, String> {
-    let path = find_data_platform_root()?.join("data");
+    let path = find_application_root()?.join("data");
 
     for folder in [
         "",
@@ -156,14 +159,14 @@ fn data_dir() -> Result<PathBuf, String> {
 }
 
 fn logs_dir() -> Result<PathBuf, String> {
-    let path = find_data_platform_root()?.join("data").join("logs");
+    let path = find_application_root()?.join("data").join("logs");
     fs::create_dir_all(&path)
         .map_err(|error| format!("Unable to create logs folder: {}", error))?;
     Ok(path)
 }
 
 fn agent_dir() -> Result<PathBuf, String> {
-    let root = find_data_platform_root()?;
+    let root = find_application_root()?;
     let path = root.join("engine").join("agents");
 
     fs::create_dir_all(&path)
@@ -649,12 +652,66 @@ fn csv_escape(value: &str) -> String {
 
 #[tauri::command]
 fn get_engine_status() -> Result<EngineStatus, String> {
-    let (path, records) = load_data_engine_records()?;
+    let (path, records) =
+        load_data_engine_records()?;
+
+    let root =
+        find_application_root()?;
+
+    let definition_path =
+        root.join(
+            "config/intelligence/active.json"
+        );
+
+    let definition_text =
+        fs::read_to_string(
+            &definition_path
+        )
+        .map_err(|error| {
+            format!(
+                "Could not read active Intelligence Definition: {}",
+                error
+            )
+        })?;
+
+    let definition_value:
+        serde_json::Value =
+        serde_json::from_str(
+            &definition_text
+        )
+        .map_err(|error| {
+            format!(
+                "Active Intelligence Definition contains invalid JSON: {}",
+                error
+            )
+        })?;
+
+    let validation_enabled =
+        definition_value
+            .get("validation")
+            .and_then(|value| {
+                value.get("enabled")
+            })
+            .and_then(|value| {
+                value.as_bool()
+            })
+            .unwrap_or(false);
 
     Ok(EngineStatus {
         status: "ready".to_string(),
         record_count: records.len(),
-        records_path: path.to_string_lossy().to_string(),
+        records_path:
+            path.to_string_lossy().to_string(),
+        connected_sources:
+            connected_sources_count()?,
+        definition_status:
+            "active".to_string(),
+        validation_status:
+            if validation_enabled {
+                "enabled".to_string()
+            } else {
+                "disabled".to_string()
+            },
     })
 }
 
@@ -826,7 +883,7 @@ fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionR
     let source_id = format!("source_{}", now);
 
     let source_record = json!({
-        "source": "data_platform_ui",
+        "source": "application_interface",
         "category": "connected_source",
         "sensor_type": "file_source",
         "value": stored_path,
@@ -845,7 +902,7 @@ fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionR
     append_jsonl(&sources_path()?, source_record.clone())?;
 
     let event_record = json!({
-        "source": "data_platform_ui",
+        "source": "application_interface",
         "category": "data_connection",
         "sensor_type": "file_source",
         "value": stored_path,
@@ -862,7 +919,7 @@ fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionR
     append_jsonl(&records_path()?, event_record)?;
 
     let raw_record = json!({
-        "source": "data_platform_ui",
+        "source": "application_interface",
         "category": "raw",
         "sensor_type": "file_source",
         "value": stored_path,
@@ -945,7 +1002,7 @@ fn create_database(
     .map_err(|error| format!("Unable to write database metadata: {}", error))?;
 
     let record = json!({
-        "source": "data_platform_ui",
+        "source": "application_interface",
         "category": "database",
         "sensor_type": "create_database",
         "value": clean_name,
@@ -1405,7 +1462,7 @@ fn workspace_action(
 
 #[tauri::command]
 fn start_agent_worker() -> Result<AgentTaskResult, String> {
-    let root = find_data_platform_root()?;
+    let root = find_application_root()?;
     let agents = agent_dir()?;
 
     let worker = agents.join("agent_worker.py");
@@ -1507,7 +1564,7 @@ fn read_agent_log() -> Result<String, String> {
     fs::read_to_string(&log_file).map_err(|error| format!("Unable to read agent log: {}", error))
 }
 #[tauri::command]
-fn update_data_platform() -> Result<String, String> {
+fn update_application() -> Result<String, String> {
     let root = std::env::var("DATA_PLATFORM_ROOT")
         .map(std::path::PathBuf::from)
         .or_else(|_| {
@@ -1517,7 +1574,7 @@ fn update_data_platform() -> Result<String, String> {
             std::env::var("USERPROFILE")
                 .map(|home| std::path::PathBuf::from(home).join("Data-Platform"))
         })
-        .map_err(|error| format!("Could not locate Data Platform root: {}", error))?;
+        .map_err(|error| format!("Could not locate application root: {}", error))?;
 
     let app_dir = root.join("application").join("data-platform-app");
 
@@ -1544,7 +1601,7 @@ echo "1. Checking source status..."
 git status --short
 
 echo ""
-echo "2. Pulling latest Data Platform changes..."
+echo "2. Pulling latest application changes..."
 git pull --ff-only
 
 echo ""
@@ -1573,7 +1630,7 @@ echo "5. Building Application Interface..."
 npm run build
 
 echo ""
-echo "Update complete. Restart Data Platform to load the newest build."
+echo "Update complete. Restart the application to load the newest build."
 "#,
         root = root.display(),
         app_dir = app_dir.display()
@@ -1614,11 +1671,14 @@ pub fn run() {
             query_records,
             intelligence_bridge::process_intelligence_request,
             intelligence_bridge::get_intelligence_definition,
+            intelligence_bridge::update_memory_settings,
+            intelligence_bridge::update_permission_settings,
+            intelligence_bridge::update_personalization_settings,
             model_bridge::get_model_options,
             model_bridge::process_manual_model_request,
             model_bridge::cancel_manual_model_request,
-            intelligence_bridge::get_data_platform_root,
-            update_data_platform,
+            intelligence_bridge::get_application_root,
+            update_application,
             get_user_locations,
             read_directory,
             connect_data,
