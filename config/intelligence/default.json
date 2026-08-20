@@ -5,7 +5,7 @@
     "name": "Default Intelligence",
     "display_name": "Default Intelligence",
     "role": "platform_intelligence",
-    "description": "The default configured intelligence instance for the Data Platform."
+    "description": "The default configured intelligence instance for the active application."
   },
   "tools": {
     "enabled": [
