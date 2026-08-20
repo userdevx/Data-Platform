@@ -359,7 +359,7 @@ class PublicSourceSearch:
             url,
             headers={
                 "User-Agent": (
-                    "Mozilla/5.0 DataPlatformSearch/1.0 "
+                    "Mozilla/5.0 ApplicationSearch/1.0 "
                     "(public source lookup)"
                 ),
                 "Accept": (

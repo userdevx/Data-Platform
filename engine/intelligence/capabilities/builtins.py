@@ -119,20 +119,167 @@ class RecordQueryCapability:
 class KnowledgeSearchCapability:
     name = "knowledge_search"
 
+    @staticmethod
+    def _answer_from_page(page: dict) -> str:
+        content = str(
+            page.get("content", "")
+        ).strip()
+
+        title = str(
+            page.get("title", "")
+        ).strip()
+
+        if not content:
+            return title
+
+        lines = content.splitlines()
+        answer_lines: list[str] = []
+
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+
+            if (
+                index == 0
+                and stripped.startswith("#")
+            ):
+                continue
+
+            if stripped.lower() == "related:":
+                break
+
+            if stripped:
+                answer_lines.append(
+                    stripped
+                )
+
+        answer = "\n".join(
+            answer_lines
+        ).strip()
+
+        if answer:
+            return answer
+
+        return content
+
     def execute(self, request, instance) -> dict:
+        tool_result = instance.execute_tool(
+            "search_knowledge",
+            {
+                "query": request.question,
+                "limit": 5,
+            },
+        )
+
+        results = list(
+            tool_result.get(
+                "results",
+                [],
+            )
+        )
+
+        if not results:
+            return {
+                "capability": self.name,
+                "source": "local_knowledge",
+                "status": "not_found",
+                "answer": (
+                    "No matching local knowledge was found."
+                ),
+                "data": {
+                    "action": (
+                        "Searched approved local knowledge."
+                    ),
+                    "explanation": (
+                        "The local knowledge search "
+                        "completed without a match."
+                    ),
+                    "next_step": "",
+                    "query": tool_result.get(
+                        "query",
+                        "",
+                    ),
+                    "result_count": 0,
+                    "evidence": [],
+                },
+                "errors": [],
+            }
+
+        primary = results[0]
+
+        evidence: list[dict] = []
+
+        for page in results:
+            content = str(
+                page.get(
+                    "content",
+                    "",
+                )
+            )
+
+            tags = page.get(
+                "tags",
+                [],
+            )
+
+            if not isinstance(tags, list):
+                tags = []
+
+            evidence.append(
+                {
+                    "source_id": str(
+                        page.get(
+                            "id",
+                            "",
+                        )
+                    ),
+                    "source_type": (
+                        "knowledge_page"
+                    ),
+                    "title": str(
+                        page.get(
+                            "title",
+                            "",
+                        )
+                    ),
+                    "category": str(
+                        page.get(
+                            "category",
+                            "knowledge",
+                        )
+                    ),
+                    "tags": list(tags),
+                    "source_excerpt": (
+                        content[:500]
+                    ),
+                }
+            )
+
         return {
             "capability": self.name,
-            "source": "knowledge",
-            "status": "not_implemented",
-            "answer": (
-                "The request matched knowledge search, but the knowledge "
-                "adapter is not connected to the generic runtime yet."
+            "source": "local_knowledge",
+            "status": "success",
+            "answer": self._answer_from_page(
+                primary
             ),
             "data": {
-                "action": "Matched knowledge search route.",
-                "explanation": "The runtime recognized a knowledge search request.",
-                "next_step": "Connect the knowledge search adapter.",
+                "action": (
+                    "Retrieved approved local knowledge."
+                ),
+                "explanation": (
+                    "The request was answered from "
+                    "the existing local knowledge store."
+                ),
+                "next_step": "",
+                "query": tool_result.get(
+                    "query",
+                    "",
+                ),
+                "result_count": len(
+                    results
+                ),
+                "evidence": evidence,
             },
+            "errors": [],
         }
 
 

@@ -92,7 +92,7 @@ def search_crawled_pages(query: str, limit: int = 5) -> list[dict[str, Any]]:
             {
                 "title": title or "Untitled Page",
                 "url": url,
-                "snippet": text[:500],
+                "source_excerpt": text[:500],
                 "provider": "local_crawled_pages",
                 "score": score,
                 "matched_terms": sorted(matched_terms),

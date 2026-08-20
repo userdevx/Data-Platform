@@ -29,7 +29,7 @@ def valid_url(url: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-class PaigeSpider(scrapy.Spider):
+class SourceCrawlerSpider(scrapy.Spider):
     name = "paige_spider"
 
     custom_settings = {
@@ -38,7 +38,7 @@ class PaigeSpider(scrapy.Spider):
         "DOWNLOAD_TIMEOUT": 15,
         "DEPTH_LIMIT": 1,
         "CONCURRENT_REQUESTS": 4,
-        "USER_AGENT": "DataPlatformPaigeCrawler/1.0",
+        "USER_AGENT": "ApplicationCrawler/1.0",
     }
 
     def __init__(self, start_url: str, max_pages: int = 5, *args: Any, **kwargs: Any):
@@ -113,7 +113,7 @@ def crawl_site(start_url: str, max_pages: int = 5) -> dict[str, Any]:
         before_count = sum(1 for line in CRAWLED_PAGES_FILE.open("r", encoding="utf-8") if line.strip())
 
     process = CrawlerProcess()
-    process.crawl(PaigeSpider, start_url=start_url, max_pages=max_pages)
+    process.crawl(SourceCrawlerSpider, start_url=start_url, max_pages=max_pages)
     process.start()
 
     after_count = 0

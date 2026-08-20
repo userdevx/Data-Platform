@@ -1,8 +1,9 @@
+from uuid import uuid4
 from engine.ui_actions import (
     create_database,
     data_setup_ready,
     open_source,
-    paige_ready,
+    intelligence_ready,
     run_pipeline,
     run_query,
     run_ui_action,
@@ -32,11 +33,11 @@ def test_data_setup_ready(tmp_path, monkeypatch):
     assert result["message"] == "Data setup ready."
 
 
-def test_paige_ready():
-    result = paige_ready()
+def test_intelligence_ready():
+    result = intelligence_ready()
 
     assert result["status"] == "success"
-    assert result["message"] == "Paige ready."
+    assert result["message"] == "Intelligence ready."
 
 
 def test_settings_ready():
@@ -121,11 +122,12 @@ def test_save_settings_validates_email(tmp_path, monkeypatch):
 
 
 def test_save_settings_success(tmp_path, monkeypatch):
+    generated_display_name = f"identity-{uuid4().hex}"
     monkeypatch.chdir(tmp_path)
 
     result = save_settings(
         {
-            "display_name": "Data Platform User",
+            "display_name": generated_display_name,
             "email": "user@example.com",
             "storage_limit": "500 MB",
             "privacy": "local_first",

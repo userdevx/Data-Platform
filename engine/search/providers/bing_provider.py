@@ -11,10 +11,8 @@ def search_bing(query: str, limit: int = 5) -> list[SearchResult]:
         {
             "title": "Bing search provider ready",
             "url": "",
-            "snippet": (
-                "The Bing provider route is connected. "
-                "Add BING_SEARCH_API_KEY later to activate live Bing Search."
-            ),
+            "retrieved_text": "",
+            "source_excerpt": "",
             "provider": "bing",
             "query": query,
             "rank": 1,

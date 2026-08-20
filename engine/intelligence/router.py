@@ -6,6 +6,7 @@ from engine.intelligence.memory_runtime import (
     is_explicit_memory_command,
 )
 from engine.intelligence.models import IntelligenceRequest
+from engine.knowledge.knowledge_store import search_pages
 
 
 @dataclass(frozen=True)
@@ -159,53 +160,119 @@ class IntelligenceRouter:
         )
 
     def _knowledge_search(self, text: str) -> bool:
-        return any(
-            phrase in text
-            for phrase in [
-                "knowledge",
-                "project notes",
-                "explain platform",
-                "platform components",
-                "what is the data platform",
-                "what is data platform",
-            ]
+        normalized = " ".join(
+            text.lower().split()
+        ).strip()
+
+        if not normalized:
+            return False
+
+        # Keep more-specific deterministic routes from being
+        # intercepted by generic local knowledge retrieval.
+        if self._memory_command(normalized):
+            return False
+
+        if self._datetime(normalized):
+            return False
+
+        if self._record_query(normalized):
+            return False
+
+        if self._public_source_search(normalized):
+            return False
+
+        # Knowledge subjects are discovered from the existing
+        # local knowledge store instead of a hardcoded phrase list.
+        return bool(
+            search_pages(
+                normalized,
+                limit=1,
+            )
         )
 
     def _public_source_search(self, text: str) -> bool:
-        has_public_source = any(
-            source in text
-            for source in [
-                "instagram",
-                "youtube",
-                "spotify",
-                "facebook",
-                "tiktok",
-                "twitter",
-                "web",
-                "internet",
-            ]
+        normalized = " ".join(text.lower().split()).strip()
+
+        if not normalized:
+            return False
+
+        explicit_sources = (
+            "instagram",
+            "youtube",
+            "spotify",
+            "facebook",
+            "tiktok",
+            "twitter",
+            "web",
+            "internet",
         )
 
-        has_source_request = any(
-            phrase in text
-            for phrase in [
-                "search",
-                "find",
-                "look up",
-                "lookup",
-                "who is",
-                "what is",
-                "profile",
-                "account",
-                "handle",
-                "official",
-                "link",
-                "bio",
-                "posts",
-            ]
+        explicit_search_actions = (
+            "search",
+            "find",
+            "look up",
+            "lookup",
+            "profile",
+            "account",
+            "handle",
+            "official",
+            "link",
+            "bio",
+            "biography",
+            "posts",
+            "recent activity",
         )
 
-        return has_public_source and has_source_request
+        entity_research_prefixes = (
+            "who is ",
+            "who was ",
+            "tell me about ",
+            "research ",
+            "give me a biography of ",
+            "give me the biography of ",
+            "what is known about ",
+            "what do we know about ",
+            "background of ",
+            "biography of ",
+        )
+
+        current_fact_prefixes = (
+            "who is the current ",
+            "who currently ",
+            "what is the current ",
+            "what are the current ",
+        )
+
+        has_explicit_source = any(
+            source in normalized
+            for source in explicit_sources
+        )
+
+        has_explicit_search_action = any(
+            action in normalized
+            for action in explicit_search_actions
+        )
+
+        requests_entity_research = any(
+            normalized.startswith(prefix)
+            for prefix in entity_research_prefixes
+        )
+
+        requests_current_fact = any(
+            normalized.startswith(prefix)
+            for prefix in current_fact_prefixes
+        )
+
+        explicit_source_search = (
+            has_explicit_source
+            and has_explicit_search_action
+        )
+
+        return (
+            explicit_source_search
+            or requests_entity_research
+            or requests_current_fact
+        )
 
     def _model_reasoning(self, text: str) -> bool:
         return any(

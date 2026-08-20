@@ -163,11 +163,11 @@ def data_setup_ready() -> dict[str, Any]:
     )
 
 
-def paige_ready() -> dict[str, Any]:
+def intelligence_ready() -> dict[str, Any]:
     return action_response(
-        action="paige_ready",
+        action="intelligence_ready",
         status="success",
-        message="Paige ready.",
+        message="Intelligence ready.",
         rows=[
             {"field": "question_input", "status": "ready"},
             {"field": "answer_panel", "status": "ready"},
@@ -251,7 +251,7 @@ def create_database(database_name: str, selected_file_path: str) -> dict[str, An
     )
 
     source_record = {
-        "source": "data_platform",
+        "source": "application_runtime",
         "category": "source",
         "sensor_type": "file_source",
         "value": source_file.name,
@@ -261,7 +261,7 @@ def create_database(database_name: str, selected_file_path: str) -> dict[str, An
     }
 
     database_record = {
-        "source": "data_platform",
+        "source": "application_runtime",
         "category": "database",
         "sensor_type": "create_database",
         "value": safe_name,
@@ -271,7 +271,7 @@ def create_database(database_name: str, selected_file_path: str) -> dict[str, An
     }
 
     raw_record = {
-        "source": "data_platform",
+        "source": "application_runtime",
         "category": "lakehouse",
         "sensor_type": "raw_file_import",
         "value": safe_name,
@@ -386,7 +386,7 @@ def ask_paige(question: str) -> dict[str, Any]:
     return action_response(
         action="ask_paige",
         status="pending",
-        message="Paige task accepted.",
+        message="Intelligence task accepted.",
         rows=[
             {
                 "question": question,
@@ -458,7 +458,7 @@ def run_ui_action(action: str, payload: dict[str, Any] | None = None) -> dict[st
     actions = {
         "Workspace": lambda: workspace_refresh(),
         "Data": lambda: data_setup_ready(),
-        "Paige": lambda: paige_ready(),
+        "Intelligence": lambda: intelligence_ready(),
         "Settings": lambda: settings_ready(),
         "Create Database": lambda: create_database(
             payload.get("database_name", ""),

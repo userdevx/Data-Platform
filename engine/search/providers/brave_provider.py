@@ -11,10 +11,8 @@ def search_brave(query: str, limit: int = 5) -> list[SearchResult]:
         {
             "title": "Brave search provider ready",
             "url": "",
-            "snippet": (
-                "The Brave provider route is connected. "
-                "Add BRAVE_SEARCH_API_KEY later to activate live Brave Search."
-            ),
+            "retrieved_text": "",
+            "source_excerpt": "",
             "provider": "brave",
             "query": query,
             "rank": 1,

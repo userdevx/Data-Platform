@@ -105,7 +105,7 @@ TOP_SOFTWARE_SOURCES = (
 )
 
 REQUEST_HEADERS = {
-    "User-Agent": "DataPlatformIntelligence/0.1 local source reader; no persistent cookies",
+    "User-Agent": "ApplicationIntelligence/0.1 local source reader; no persistent cookies",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7",
     "Accept-Language": "en-US,en;q=0.9",
 }

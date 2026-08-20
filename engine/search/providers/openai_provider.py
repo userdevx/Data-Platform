@@ -31,7 +31,7 @@ def search_openai(query: str, limit: int = 5) -> list[SearchResult]:
     model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
     prompt = f"""
-You are Paige, the Data Platform intelligence assistant.
+You are the configured intelligence runtime. Use the active intelligence definition for identity, capabilities, and behavior.
 
 Answer the user's question clearly.
 Do not return unrelated local records.
@@ -49,9 +49,9 @@ User question:
 
     return [
         {
-            "title": "Paige Answer",
+            "title": "Intelligence Answer",
             "url": "",
-            "snippet": answer or "Paige could not generate an answer.",
+            "source_excerpt": answer or "The intelligence runtime could not generate an answer.",
             "provider": "openai_answer",
             "query": clean_query,
             "score": 999,
