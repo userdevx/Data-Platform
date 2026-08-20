@@ -15,6 +15,66 @@ export type ModelSelectorProps = {
 };
 
 
+const USER_MODE_ALLOWED_CAPABILITIES = new Set([
+  "text_input",
+  "text_generation",
+  "chat",
+  "conversation",
+  "reasoning",
+]);
+
+
+const USER_MODE_BLOCKED_CAPABILITIES = new Set([
+  "semantic_similarity",
+  "feature_extraction",
+  "text_classification",
+  "embeddings",
+  "embedding",
+]);
+
+
+function isUserModeAskModel(
+  model: ModelOption,
+): boolean {
+  if (
+    model.option_id === "automatic"
+  ) {
+    return true;
+  }
+
+  if (
+    !model.available
+  ) {
+    return false;
+  }
+
+  const capabilities =
+    model.capabilities || [];
+
+  const hasBlockedCapability =
+    capabilities.some((capability) =>
+      USER_MODE_BLOCKED_CAPABILITIES.has(
+        capability,
+      ),
+    );
+
+  if (
+    hasBlockedCapability
+  ) {
+    return false;
+  }
+
+  const hasAllowedCapability =
+    capabilities.some((capability) =>
+      USER_MODE_ALLOWED_CAPABILITIES.has(
+        capability,
+      ),
+    );
+
+  return hasAllowedCapability;
+}
+
+
 function getModelLabel(
   model: ModelOption,
 ): string {
@@ -25,8 +85,9 @@ function getModelLabel(
   }
 
   return (
-    model.model_id
-    || model.display_name
+    model.display_name
+    || model.model_id
+    || model.option_id
   );
 }
 
@@ -38,6 +99,11 @@ export default function ModelSelector({
   runtimeStatus,
   onModelChange,
 }: ModelSelectorProps) {
+  const visibleModelOptions =
+    modelOptions.filter(
+      isUserModeAskModel,
+    );
+
   return (
     <>
       <label
@@ -70,14 +136,14 @@ export default function ModelSelector({
         ) : null}
 
         {!modelsLoading
-          && modelOptions.length === 0 ? (
+          && visibleModelOptions.length === 0 ? (
             <option value="">
-              No models available
+              No Ask models available
             </option>
           ) : null}
 
         {!modelsLoading
-          ? modelOptions.map(
+          ? visibleModelOptions.map(
               (model) => (
                 <option
                   key={

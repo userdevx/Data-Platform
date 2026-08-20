@@ -1222,3 +1222,14 @@
     opacity: 1;
   }
 }
+
+/* User Mode: hide model routing/helper descriptions under the model selector. */
+.ask-panel .model-selection-summary,
+.ask-panel .model-selection-summary *,
+.ask-panel .model-location-automatic,
+.ask-panel .model-location-automatic *,
+.ask-panel [class*="summary"],
+.ask-panel [class*="routing"],
+.ask-panel [class*="capability"] {
+  display: none !important;
+}

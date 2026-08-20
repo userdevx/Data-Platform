@@ -220,20 +220,63 @@ export default function ButtonInterfacePage() {
           );
         }
 
-        setModelOptions(result.models);
+        const userModeAskModels =
+          result.models.filter((model) => {
+            if (model.option_id === "automatic") {
+              return true;
+            }
+
+            if (!model.available) {
+              return false;
+            }
+
+            const capabilities =
+              model.capabilities ?? [];
+
+            const blockedCapabilities = new Set([
+              "semantic_similarity",
+              "feature_extraction",
+              "text_classification",
+              "embedding",
+              "embeddings",
+            ]);
+
+            const allowedCapabilities = new Set([
+              "text_input",
+              "text_generation",
+              "chat",
+              "conversation",
+              "reasoning",
+            ]);
+
+            const hasBlockedCapability =
+              capabilities.some((capability) =>
+                blockedCapabilities.has(capability),
+              );
+
+            if (hasBlockedCapability) {
+              return false;
+            }
+
+            return capabilities.some((capability) =>
+              allowedCapabilities.has(capability),
+            );
+          });
+
+        setModelOptions(userModeAskModels);
 
         const initialModel =
-          result.models.find(
+          userModeAskModels.find(
             (model) =>
               model.option_id === "automatic"
               && model.available,
           )
-          ?? result.models.find(
+          ?? userModeAskModels.find(
             (model) => model.available,
           );
 
         setSelectedModelId(
-          initialModel?.option_id ?? "",
+          initialModel?.option_id ?? "automatic",
         );
 
         setLogs((current) => [

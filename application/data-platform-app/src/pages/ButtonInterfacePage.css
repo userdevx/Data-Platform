@@ -948,3 +948,26 @@ button:disabled {
   background: rgba(255, 255, 255, 0.16) !important;
   color: #ffffff !important;
 }
+
+/* User Mode: hide model helper details under the selector.
+   The selector itself is enough. Routing details belong in Developer Mode. */
+
+.model-selection-summary,
+.ask-panel .model-selection-summary,
+.paige-model-summary,
+.model-helper-text,
+.model-routing-note,
+.capability-routing-note {
+  display: none !important;
+}
+
+/* User Mode: hide model routing/helper descriptions under the model selector. */
+.ask-panel .model-selection-summary,
+.ask-panel .model-selection-summary *,
+.ask-panel .model-location-automatic,
+.ask-panel .model-location-automatic *,
+.ask-panel [class*="summary"],
+.ask-panel [class*="routing"],
+.ask-panel [class*="capability"] {
+  display: none !important;
+}
