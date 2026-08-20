@@ -459,10 +459,23 @@ def process_hugging_face_model_request(
             )
         )
 
+        source_text = str(
+            arguments.get(
+                "source_text",
+                question,
+            )
+        ).strip()
+
+        if not source_text:
+            raise ValueError(
+                "semantic_similarity requires "
+                "source text."
+            )
+
         source_embedding = (
             _sentence_vector(
                 client.feature_extraction(
-                    question,
+                    source_text,
                     model=model_id,
                 )
             )

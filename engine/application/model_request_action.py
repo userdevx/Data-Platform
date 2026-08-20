@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import re
 
 from engine.application.environment import (
     load_project_environment,
@@ -78,6 +79,92 @@ def _resolve_requested_capability(
     )
 
 
+
+def _extract_similarity_texts(
+    question: str,
+) -> tuple[str, str]:
+    quoted_values = tuple(
+        value.strip()
+        for value in re.findall(
+            r'["“](.+?)["”]',
+            question,
+            flags=re.DOTALL,
+        )
+        if value.strip()
+    )
+
+    if len(quoted_values) >= 2:
+        return (
+            quoted_values[0],
+            quoted_values[1],
+        )
+
+    blocks = tuple(
+        block.strip()
+        for block in re.split(
+            r"\n\s*\n|\n",
+            question,
+        )
+        if block.strip()
+    )
+
+    if len(blocks) >= 2:
+        return (
+            blocks[-2],
+            blocks[-1],
+        )
+
+    raise ValueError(
+        "The selected model requires two "
+        "text values in the same request."
+    )
+
+
+def _build_internal_arguments(
+    *,
+    question: str,
+    capability: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    resolved = dict(arguments)
+
+    if capability != "semantic_similarity":
+        return resolved
+
+    has_comparison = bool(
+        str(
+            resolved.get(
+                "comparison_text",
+                "",
+            )
+        ).strip()
+    )
+
+    has_comparisons = bool(
+        resolved.get(
+            "comparison_texts"
+        )
+    )
+
+    if has_comparison or has_comparisons:
+        return resolved
+
+    source_text, comparison_text = (
+        _extract_similarity_texts(
+            question
+        )
+    )
+
+    resolved["source_text"] = (
+        source_text
+    )
+    resolved["comparison_text"] = (
+        comparison_text
+    )
+
+    return resolved
+
+
 def process_manual_model_request(
     *,
     question: str,
@@ -151,8 +238,16 @@ def process_manual_model_request(
         )
     )
 
-    request_arguments = dict(
-        arguments or {}
+    request_arguments = (
+        _build_internal_arguments(
+            question=clean_question,
+            capability=(
+                selected_capability
+            ),
+            arguments=dict(
+                arguments or {}
+            ),
+        )
     )
 
     results: list[dict[str, Any]] = []
