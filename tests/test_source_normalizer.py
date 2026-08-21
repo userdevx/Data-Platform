@@ -1,48 +1,250 @@
-from engine.source_normalizer import normalize_source_record
+from engine.source_normalizer import (
+    normalize_source_record,
+    resolve_source_data_type,
+)
 
 
-def test_source_normalizer_generalizes_source():
+def test_generic_data_type_is_preserved():
     record = {
-        "source": "arduino_uno_r4_wifi",
-        "category": "motion",
-        "sensor_type": "hc_sr501_pir",
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "runtime_data",
+        "value": {
+            "state": "ready",
+        },
+        "unit": "record",
+    }
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert (
+        normalized["data_type"]
+        == "runtime_data"
+    )
+
+    assert (
+        normalized["metadata"][
+            "original_data_type"
+        ]
+        == "runtime_data"
+    )
+
+
+def test_legacy_sensor_type_becomes_data_type():
+    record = {
+        "source": "runtime_device",
+        "category": "runtime_category",
+        "sensor_type": "runtime_sensor",
         "value": True,
         "unit": "boolean",
     }
 
-    normalized = normalize_source_record(record)
+    normalized = normalize_source_record(
+        record
+    )
 
-    assert normalized["source"] == "edge_device"
-    assert normalized["source_id"] == "src_arduino_uno_r4_wifi"
-    assert normalized["source_label"] == "Arduino Uno R4 Wifi"
-    assert normalized["sensor_type"] == "pir_motion_sensor"
+    assert (
+        normalized["data_type"]
+        == "runtime_sensor"
+    )
 
-    assert normalized["metadata"]["original_source"] == "arduino_uno_r4_wifi"
-    assert normalized["metadata"]["original_sensor_type"] == "hc_sr501_pir"
-    assert normalized["metadata"]["hardware_platform"] == "arduino_uno_r4_wifi"
-    assert normalized["metadata"]["sensor_model"] == "hc_sr501_pir"
+    assert (
+        normalized["sensor_type"]
+        == "runtime_sensor"
+    )
+
+    assert (
+        normalized["metadata"][
+            "original_sensor_type"
+        ]
+        == "runtime_sensor"
+    )
+
+    assert (
+        normalized["metadata"][
+            "sensor_model"
+        ]
+        == "runtime_sensor"
+    )
 
 
-def test_source_normalizer_accepts_custom_metadata():
+def test_data_type_is_preferred_over_sensor_type():
     record = {
-        "source": "device_001",
-        "category": "motion",
-        "sensor_type": "custom_sensor",
-        "value": False,
-        "unit": "boolean",
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "canonical_data",
+        "sensor_type": "legacy_data",
+        "value": 1,
+        "unit": "record",
+    }
+
+    assert (
+        resolve_source_data_type(
+            record
+        )
+        == "canonical_data"
+    )
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert (
+        normalized["data_type"]
+        == "canonical_data"
+    )
+
+    assert (
+        normalized["sensor_type"]
+        == "legacy_data"
+    )
+
+
+def test_generic_source_is_not_forced_to_device_type():
+    record = {
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "runtime_data",
+        "value": 1,
+        "unit": "record",
+    }
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert (
+        normalized["source"]
+        == "runtime_source"
+    )
+
+
+def test_source_type_metadata_can_override_source():
+    record = {
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "runtime_data",
+        "value": 1,
+        "unit": "record",
         "metadata": {
-            "source_type": "sensor_node",
-            "source_id": "src_sensor_node_001",
-            "source_label": "Front Door Sensor Node",
-            "hardware_platform": "custom_board",
-            "sensor_model": "custom_pir",
+            "source_type":
+                "configured_source_type",
         },
     }
 
-    normalized = normalize_source_record(record)
+    normalized = normalize_source_record(
+        record
+    )
 
-    assert normalized["source"] == "sensor_node"
-    assert normalized["source_id"] == "src_sensor_node_001"
-    assert normalized["source_label"] == "Front Door Sensor Node"
-    assert normalized["metadata"]["hardware_platform"] == "custom_board"
-    assert normalized["metadata"]["sensor_model"] == "custom_pir"
+    assert (
+        normalized["source"]
+        == "configured_source_type"
+    )
+
+    assert (
+        normalized["metadata"][
+            "original_source"
+        ]
+        == "runtime_source"
+    )
+
+
+def test_source_identity_metadata_is_generated():
+    record = {
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "runtime_data",
+        "value": 1,
+        "unit": "record",
+    }
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert (
+        normalized["source_id"]
+        == "src_runtime_source"
+    )
+
+    assert (
+        normalized["source_label"]
+        == "Runtime Source"
+    )
+
+
+def test_custom_source_metadata_is_preserved():
+    record = {
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "runtime_data",
+        "value": 1,
+        "unit": "record",
+        "metadata": {
+            "source_type":
+                "configured_source",
+            "source_id":
+                "configured_id",
+            "source_label":
+                "Configured Label",
+        },
+    }
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert (
+        normalized["source"]
+        == "configured_source"
+    )
+
+    assert (
+        normalized["source_id"]
+        == "configured_id"
+    )
+
+    assert (
+        normalized["source_label"]
+        == "Configured Label"
+    )
+
+
+def test_missing_type_uses_unknown_data():
+    record = {
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "value": 1,
+        "unit": "record",
+    }
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert (
+        normalized["data_type"]
+        == "unknown_data"
+    )
+
+
+def test_invalid_metadata_is_replaced_safely():
+    record = {
+        "source": "runtime_source",
+        "category": "runtime_category",
+        "data_type": "runtime_data",
+        "value": 1,
+        "unit": "record",
+        "metadata": [],
+    }
+
+    normalized = normalize_source_record(
+        record
+    )
+
+    assert isinstance(
+        normalized["metadata"],
+        dict,
+    )
