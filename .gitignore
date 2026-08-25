@@ -84,3 +84,5 @@ engine/agents/agent_output.json
 data/approved_sources/
 data/archive/
 data/vault/
+venv-training/
+data/model_training/
