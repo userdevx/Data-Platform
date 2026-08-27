@@ -86,3 +86,6 @@ data/archive/
 data/vault/
 venv-training/
 data/model_training/
+
+# Data Engine runtime lock files
+data/*.json.lock
