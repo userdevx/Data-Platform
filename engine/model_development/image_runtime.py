@@ -221,6 +221,48 @@ def _component_has_weights(
     )
 
 
+def _import_component_module(
+    library_name: str,
+):
+    clean_library_name = (
+        library_name.strip()
+    )
+
+    if not clean_library_name:
+        return None
+
+    candidate_names: list[str] = []
+
+    for candidate in (
+        clean_library_name,
+        (
+            "diffusers.pipelines."
+            f"{clean_library_name}"
+        ),
+        "diffusers",
+        "transformers",
+    ):
+        if (
+            candidate
+            and candidate
+            not in candidate_names
+        ):
+            candidate_names.append(
+                candidate
+            )
+
+    for candidate_name in (
+        candidate_names
+    ):
+        try:
+            return importlib.import_module(
+                candidate_name
+            )
+        except ImportError:
+            continue
+
+    return None
+
 def _component_class(
     model_index: dict[str, Any],
     component_name: str,
@@ -258,26 +300,62 @@ def _component_class(
     ):
         return None
 
-    try:
-        module = importlib.import_module(
-            library_name
-        )
-    except ImportError:
-        return None
-
-    candidate = getattr(
-        module,
-        class_name,
-        None,
+    clean_library_name = (
+        library_name.strip()
     )
 
-    if isinstance(
-        candidate,
-        type,
+    clean_class_name = (
+        class_name.strip()
+    )
+
+    candidate_module_names: list[
+        str
+    ] = []
+
+    for module_name in (
+        clean_library_name,
+        (
+            "diffusers.pipelines."
+            f"{clean_library_name}"
+        ),
+        "diffusers",
+        "transformers",
     ):
-        return candidate
+        if (
+            module_name
+            and module_name
+            not in candidate_module_names
+        ):
+            candidate_module_names.append(
+                module_name
+            )
+
+    for module_name in (
+        candidate_module_names
+    ):
+        try:
+            module = (
+                importlib.import_module(
+                    module_name
+                )
+            )
+        except ImportError:
+            continue
+
+        candidate = getattr(
+            module,
+            clean_class_name,
+            None,
+        )
+
+        if isinstance(
+            candidate,
+            type,
+        ):
+            return candidate
 
     return None
+
 
 
 def _class_requires_weights(
@@ -433,7 +511,10 @@ def _component_overrides(
     ] = {}
 
     for component_name in optional:
-        if component_name not in model_index:
+        if (
+            component_name
+            not in model_index
+        ):
             continue
 
         component_path = (
@@ -448,48 +529,42 @@ def _component_overrides(
 
             continue
 
-        declared_class = (
+        has_weights = (
+            _component_has_weights(
+                component_path
+            )
+        )
+
+        component_class = (
             _component_class(
                 model_index,
                 component_name,
             )
         )
 
+        if component_class is None:
+            # Optional component whose
+            # implementation cannot be resolved:
+            # trust the local materialization.
+            #
+            # If it has no model weights, disable
+            # it rather than allowing the pipeline
+            # loader to discover the problem later.
+            if not has_weights:
+                overrides[
+                    component_name
+                ] = None
+
+            continue
+
         if (
             _class_requires_weights(
-                declared_class
+                component_class
             )
-            and not _component_has_weights(
-                component_path
-            )
+            and not has_weights
         ):
             overrides[
                 component_name
-            ] = None
-
-    # A safety checker is an optional inference
-    # component. Some locally materialized model
-    # repositories retain its directory/config
-    # without shipping its model weights.
-    #
-    # Do not attempt to load an incomplete optional
-    # safety checker. This decision is capability-
-    # based and does not depend on a particular
-    # model identity.
-    if (
-        "safety_checker"
-        in model_index
-    ):
-        safety_path = (
-            model_path
-            / "safety_checker"
-        )
-
-        if not _component_has_weights(
-            safety_path
-        ):
-            overrides[
-                "safety_checker"
             ] = None
 
     if (
@@ -525,6 +600,7 @@ def _component_overrides(
 
 
 
+
 def _validate_required_components(
     *,
     pipeline_class,
@@ -546,6 +622,11 @@ def _validate_required_components(
         if component_name in optional:
             continue
 
+        component_path = (
+            model_path
+            / component_name
+        )
+
         component_class = (
             _component_class(
                 model_index,
@@ -553,24 +634,42 @@ def _validate_required_components(
             )
         )
 
-        if not _class_requires_weights(
-            component_class
-        ):
-            continue
-
-        component_path = (
-            model_path
-            / component_name
+        has_weights = (
+            _component_has_weights(
+                component_path
+            )
         )
 
-        if not _component_has_weights(
-            component_path
+        if component_class is None:
+            # Required components fail closed.
+            #
+            # If their implementation cannot be
+            # resolved and there are no model
+            # weights present, do not defer the
+            # failure to from_pretrained().
+            if not has_weights:
+                raise ImageRuntimeError(
+                    "A required image-model "
+                    "component could not be "
+                    "validated and contains no "
+                    "model weights: "
+                    f"{component_name}"
+                )
+
+            continue
+
+        if (
+            _class_requires_weights(
+                component_class
+            )
+            and not has_weights
         ):
             raise ImageRuntimeError(
                 "A required image-model "
                 "component is incomplete: "
                 f"{component_name}"
             )
+
 
 
 def _version_pair(
