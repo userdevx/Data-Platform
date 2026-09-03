@@ -18,6 +18,7 @@ export type ModelSelectorProps = {
 const USER_MODE_ALLOWED_CAPABILITIES = new Set([
   "text_input",
   "text_generation",
+  "image_generation",
   "chat",
   "conversation",
   "reasoning",

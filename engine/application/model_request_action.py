@@ -36,6 +36,11 @@ from engine.application.huggingface_model_action import (
     process_hugging_face_model_request,
 )
 
+from engine.application.local_model_action import (
+    is_local_model_provider,
+    process_local_model_request,
+)
+
 
 def _resolve_requested_capability(
     *,
@@ -213,6 +218,17 @@ def process_manual_model_request(
         raise ValueError(
             "The provider and model "
             "identifiers are required."
+        )
+
+    if is_local_model_provider(
+        provider_id
+    ):
+        return process_local_model_request(
+            question=clean_question,
+            model_id=model_id,
+            requested_capability=(
+                capability
+            ),
         )
 
     configuration = (
