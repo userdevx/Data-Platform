@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from engine.application.local_model_worker import (
+    execute_local_model_worker,
+    worker_runtime_identity,
+)
+
 import base64
 import json
 import os
@@ -126,6 +131,8 @@ def _execute_worker(
     *,
     model_id: str,
     question: str,
+    capability: str,
+    arguments: dict[str, Any],
 ) -> dict[str, Any]:
     if not MODEL_PYTHON.is_file():
         raise VisualProviderUnavailableError(
@@ -133,61 +140,22 @@ def _execute_worker(
             "environment is unavailable."
         )
 
-    command = [
-        str(MODEL_PYTHON),
-        "-m",
-        "engine.model_development",
-        "test",
-        "--model",
-        model_id,
-        "--prompt",
-        question,
-        "--max-new-tokens",
-        "128",
-        "--steps",
-        "6",
-        "--width",
-        "384",
-        "--height",
-        "384",
-        "--seed",
-        "17",
-    ]
-
-    environment = dict(
-        os.environ
-    )
-
-    environment[
-        "PYTHONPATH"
-    ] = str(
-        PROJECT_ROOT
-    )
-
-    completed = subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=55,
-        check=False,
-    )
-
-    if completed.returncode != 0:
-        diagnostic = (
-            completed.stderr.strip()
-            or completed.stdout.strip()
-            or "Local model execution failed."
+    try:
+        return execute_local_model_worker(
+            model_python=MODEL_PYTHON,
+            project_root=PROJECT_ROOT,
+            model_id=model_id,
+            question=question,
+            capability=capability,
+            arguments=arguments,
         )
 
+    except Exception as error:
         raise VisualProviderUnavailableError(
-            diagnostic[-4000:]
-        )
+            str(error)
+        ) from error
 
-    return _parse_worker_response(
-        completed.stdout
-    )
+
 
 
 def _image_data_url(
@@ -230,11 +198,10 @@ def process_local_model_request(
     question: str,
     model_id: str,
     requested_capability: str = "",
+    arguments: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    descriptor = (
-        resolve_base_model(
-            model_id
-        )
+    descriptor = resolve_base_model(
+        model_id
     )
 
     selected_capability = (
@@ -251,12 +218,18 @@ def process_local_model_request(
         raise VisualProviderUnavailableError(
             "The selected local model "
             "does not support the "
-            "required capability."
+            "requested capability."
         )
 
     result = _execute_worker(
         model_id=model_id,
         question=question,
+        capability=(
+            selected_capability
+        ),
+        arguments=dict(
+            arguments or {}
+        ),
     )
 
     output_type = str(
@@ -264,7 +237,7 @@ def process_local_model_request(
             "output_type",
             "",
         )
-    )
+    ).strip()
 
     if output_type == "text":
         answer = str(
@@ -286,7 +259,7 @@ def process_local_model_request(
                 "output_path",
                 "",
             )
-        )
+        ).strip()
 
         result[
             "image_data_url"
@@ -301,7 +274,7 @@ def process_local_model_request(
     else:
         raise VisualProviderUnavailableError(
             "The local model returned "
-            "an unsupported output."
+            "an unsupported output type."
         )
 
     return {

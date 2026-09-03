@@ -255,6 +255,9 @@ def process_automatic_model_request(
                         requested_capability=(
                             clean_capability
                         ),
+                        arguments=(
+                            request_arguments
+                        ),
                     )
                 )
 

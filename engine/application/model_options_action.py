@@ -6,6 +6,9 @@ from typing import Any
 from engine.application.environment import (
     load_project_environment,
 )
+from engine.application.local_model_action import (
+    build_local_model_options,
+)
 from engine.application.model_options import (
     build_model_options,
 )
@@ -42,15 +45,51 @@ def get_model_options() -> dict[str, Any]:
             )
         )
 
-        registry = build_visual_provider_registry(
-            configuration
+        registry = (
+            build_visual_provider_registry(
+                configuration
+            )
         )
+
+        models = build_model_options(
+            registry
+        )
+
+        existing = {
+            str(
+                model.get(
+                    "option_id",
+                    "",
+                )
+            )
+            for model
+            in models
+        }
+
+        for local_model in (
+            build_local_model_options()
+        ):
+            option_id = str(
+                local_model.get(
+                    "option_id",
+                    "",
+                )
+            )
+
+            if option_id in existing:
+                continue
+
+            models.append(
+                local_model
+            )
+
+            existing.add(
+                option_id
+            )
 
         return {
             "status": "success",
-            "models": build_model_options(
-                registry
-            ),
+            "models": models,
             "errors": [],
         }
 

@@ -211,14 +211,41 @@ def _component_has_weights(
     if not component_path.is_dir():
         return False
 
-    return any(
-        candidate.is_file()
-        for pattern in WEIGHT_PATTERNS
-        for candidate
-        in component_path.rglob(
-            pattern
-        )
-    )
+    directly_loadable_names = {
+        "model.safetensors",
+        "pytorch_model.bin",
+        "diffusion_pytorch_model.safetensors",
+        "diffusion_pytorch_model.bin",
+    }
+
+    loadable_index_names = {
+        "model.safetensors.index.json",
+        "pytorch_model.bin.index.json",
+        "diffusion_pytorch_model.safetensors.index.json",
+        "diffusion_pytorch_model.bin.index.json",
+    }
+
+    for candidate in component_path.rglob(
+        "*"
+    ):
+        if not candidate.is_file():
+            continue
+
+        if (
+            candidate.name
+            in directly_loadable_names
+        ):
+            return True
+
+        if (
+            candidate.name
+            in loadable_index_names
+        ):
+            return True
+
+    return False
+
+
 
 
 def _import_component_module(

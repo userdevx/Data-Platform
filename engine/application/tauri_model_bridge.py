@@ -10,6 +10,13 @@ from engine.application.model_options_action import (
 from engine.application.model_request_action import (
     process_manual_model_request,
 )
+from engine.application.local_model_action import (
+    MODEL_PYTHON,
+    PROJECT_ROOT,
+)
+from engine.application.local_model_worker import (
+    worker_runtime_identity,
+)
 from services.visual_model.provider_errors import (
     VisualProviderError,
 )
@@ -30,6 +37,14 @@ def parse_arguments() -> argparse.Namespace:
     subparsers.add_parser(
         "options",
         help="Return runtime model options.",
+    )
+
+    subparsers.add_parser(
+        "runtime-identity",
+        help=(
+            "Return local model worker "
+            "runtime identity."
+        ),
     )
 
     ask_parser = subparsers.add_parser(
@@ -66,6 +81,16 @@ def main() -> int:
     try:
         if arguments.command == "options":
             result = get_model_options()
+
+        elif (
+            arguments.command
+            == "runtime-identity"
+        ):
+            result = worker_runtime_identity(
+                model_python=MODEL_PYTHON,
+                project_root=PROJECT_ROOT,
+            )
+
         else:
             request_arguments = json.loads(
                 arguments.arguments_json

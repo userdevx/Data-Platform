@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from engine.model_development.image_runtime import (
+    execute_image_model as execute_image_generation_model,
+)
+
 import json
 import time
 from dataclasses import dataclass
@@ -457,247 +461,26 @@ def _execute_image_model(
     height: int,
     seed: int,
 ) -> dict[str, Any]:
-    width = _validate_dimension(
-        width,
-        "width",
-    )
-
-    height = _validate_dimension(
-        height,
-        "height",
-    )
-
-    try:
-        import torch
-
-        import diffusers
-
-        from diffusers import (
-            DiffusionPipeline,
-        )
-    except ImportError as error:
-        raise ModelDevelopmentRuntimeError(
-            "Image generation dependencies "
-            "are unavailable."
-        ) from error
-
-    if output_path is None:
-        destination = (
-            DEFAULT_IMAGE_OUTPUT_DIRECTORY
-            / descriptor.name
-            / f"{uuid4()}.png"
-        )
-    else:
-        destination = Path(
-            output_path
-        )
-
-    destination = (
-        destination.resolve()
-    )
-
-    destination.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    model_index = (
-        _read_json(
-            descriptor.path
-            / "model_index.json"
-        )
-        or {}
-    )
-
-    load_arguments: dict[
-        str,
-        Any,
-    ] = {
-        "local_files_only": True,
-        "dtype": torch.float32,
-    }
-
-    safety_directory = (
-        descriptor.path
-        / "safety_checker"
-    )
-
-    safety_weight_files = ()
-
-    if safety_directory.is_dir():
-        safety_weight_files = tuple(
-            file_path
-            for pattern in (
-                "*.safetensors",
-                "*.bin",
-            )
-            for file_path
-            in safety_directory.glob(
-                pattern
-            )
-            if file_path.is_file()
-        )
-
-    if (
-        "safety_checker"
-        in model_index
-        and not safety_weight_files
-    ):
-        load_arguments[
-            "safety_checker"
-        ] = None
-
-        load_arguments[
-            "requires_safety_checker"
-        ] = False
-
-    started_at = time.monotonic()
-
-    pipeline_class_name = str(
-        model_index.get(
-            "_class_name",
-            "",
-        )
-    ).strip()
-
-    if not pipeline_class_name:
-        raise ModelDevelopmentRuntimeError(
-            "The Diffusers model does not "
-            "declare a pipeline class."
-        )
-
-    pipeline_class = getattr(
-        diffusers,
-        pipeline_class_name,
-        None,
-    )
-
-    if (
-        not isinstance(
-            pipeline_class,
-            type,
-        )
-        or not issubclass(
-            pipeline_class,
-            DiffusionPipeline,
-        )
-    ):
-        raise ModelDevelopmentRuntimeError(
-            "The declared Diffusers pipeline "
-            "class is unavailable: "
-            f"{pipeline_class_name}"
-        )
-
-    pipeline = (
-        pipeline_class
-        .from_pretrained(
-            descriptor.path,
-            **load_arguments,
-        )
-    )
-
-    pipeline = pipeline.to(
-        "cpu"
-    )
-
-    attention_slicing = getattr(
-        pipeline,
-        "enable_attention_slicing",
-        None,
-    )
-
-    if callable(
-        attention_slicing
-    ):
-        attention_slicing()
-
-    progress_config = getattr(
-        pipeline,
-        "set_progress_bar_config",
-        None,
-    )
-
-    if callable(
-        progress_config
-    ):
-        progress_config(
-            disable=True
-        )
-
-    generator = (
-        torch.Generator(
-            device="cpu"
-        )
-        .manual_seed(
-            seed
-        )
-    )
-
-    with torch.inference_mode():
-        result = pipeline(
-            prompt=prompt,
-            num_inference_steps=(
-                inference_steps
-            ),
-            width=width,
-            height=height,
-            generator=generator,
-        )
-
-    images = getattr(
-        result,
-        "images",
-        None,
-    )
-
-    if (
-        not isinstance(
-            images,
-            list,
-        )
-        or not images
-    ):
-        raise ModelDevelopmentRuntimeError(
-            "The image model returned "
-            "no image."
-        )
-
-    images[0].save(
-        destination,
-        format="PNG",
-    )
-
-    return {
-        "model_name": descriptor.name,
-        "capability": (
-            descriptor.capability
-        ),
-        "runtime_format": (
+    return execute_image_generation_model(
+        model_name=descriptor.name,
+        model_path=descriptor.path,
+        capability=descriptor.capability,
+        runtime_format=(
             descriptor.runtime_format
         ),
-        "output_type": "image",
-        "mime_type": "image/png",
-        "output_path": str(
-            destination
+        prompt=prompt,
+        output_path=output_path,
+        default_output_directory=(
+            DEFAULT_IMAGE_OUTPUT_DIRECTORY
         ),
-        "width": width,
-        "height": height,
-        "inference_steps": (
+        inference_steps=(
             inference_steps
         ),
-        "seed": seed,
-        "elapsed_seconds": round(
-            time.monotonic()
-            - started_at,
-            2,
-        ),
-        "image_generated": (
-            destination.is_file()
-        ),
-        "model_loaded": True,
-        "training_performed": False,
-        "weights_modified": False,
-    }
+        width=width,
+        height=height,
+        seed=seed,
+    )
+
 
 
 def test_base_model(

@@ -89,3 +89,4 @@ data/model_training/
 
 # Data Engine runtime lock files
 data/*.json.lock
+data/model_outputs/

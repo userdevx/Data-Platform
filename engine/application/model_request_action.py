@@ -229,6 +229,9 @@ def process_manual_model_request(
             requested_capability=(
                 capability
             ),
+            arguments=dict(
+                arguments or {}
+            ),
         )
 
     configuration = (

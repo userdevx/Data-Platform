@@ -6,6 +6,10 @@ from pathlib import Path
 from engine.application.automatic_model_request_action import (
     process_automatic_model_request,
 )
+from engine.intelligence.generation_request import (
+    IMAGE_GENERATION,
+    resolve_generation_capability,
+)
 import json
 import re
 from datetime import datetime
@@ -710,15 +714,27 @@ class ModelReasoningCapability:
                 },
             }
 
-        memory_context = (
-            build_memory_context_for_provider(
-                root=Path.cwd(),
-                definition=(
-                    instance.definition
-                ),
-                question=request.question,
+        required_capability = (
+            resolve_generation_capability(
+                request.normalized_question
             )
         )
+
+        memory_context = ""
+
+        if (
+            required_capability
+            != IMAGE_GENERATION
+        ):
+            memory_context = (
+                build_memory_context_for_provider(
+                    root=Path.cwd(),
+                    definition=(
+                        instance.definition
+                    ),
+                    question=request.question,
+                )
+            )
 
         memory_block = ""
 
@@ -729,35 +745,41 @@ class ModelReasoningCapability:
                 f"{memory_context}\n"
             )
 
-        prompt = (
-            "Answer the user's request directly.\n"
-            "Start with the information or result "
-            "the user requested.\n"
-            "Do not restate, repeat, summarize, "
-            "or paraphrase the user's request "
-            "before answering.\n"
-            "Do not begin with conversational "
-            "acknowledgements or introductory "
-            "filler.\n"
-            "Use natural, clear language.\n"
-            "Do not expose backend routing, "
-            "provider details, memory internals, "
-            "or system internals.\n"
-            "Keep the response concise unless "
-            "the user asks for detail.\n"
-            "Use relevant stored context only "
-            "when it materially helps answer "
-            "the request.\n"
-            f"{memory_block}\n"
-            f"User request: {request.question}"
-        )
+        if (
+            required_capability
+            == IMAGE_GENERATION
+        ):
+            prompt = request.question
+        else:
+            prompt = (
+                "Answer the user's request directly.\n"
+                "Start with the information or result "
+                "the user requested.\n"
+                "Do not restate, repeat, summarize, "
+                "or paraphrase the user's request "
+                "before answering.\n"
+                "Do not begin with conversational "
+                "acknowledgements or introductory "
+                "filler.\n"
+                "Use natural, clear language.\n"
+                "Do not expose backend routing, "
+                "provider details, memory internals, "
+                "or system internals.\n"
+                "Keep the response concise unless "
+                "the user asks for detail.\n"
+                "Use relevant stored context only "
+                "when it materially helps answer "
+                "the request.\n"
+                f"{memory_block}\n"
+                f"User request: {request.question}"
+            )
 
         try:
             provider_result = (
                 process_automatic_model_request(
                     question=prompt,
                     required_capability=(
-                        "text_input"
+                        required_capability
                     ),
                 )
             )
@@ -821,6 +843,80 @@ class ModelReasoningCapability:
                 dict,
             ):
                 selection = {}
+
+            if (
+                required_capability
+                == IMAGE_GENERATION
+            ):
+                image_data_url = str(
+                    provider_metadata.get(
+                        "image_data_url",
+                        "",
+                    )
+                )
+
+                output_path = str(
+                    provider_metadata.get(
+                        "output_path",
+                        "",
+                    )
+                )
+
+                mime_type = str(
+                    provider_metadata.get(
+                        "mime_type",
+                        "image/png",
+                    )
+                )
+
+                if not image_data_url:
+                    raise RuntimeError(
+                        "The image model completed "
+                        "without returning an image."
+                    )
+
+                return {
+                    "capability": (
+                        IMAGE_GENERATION
+                    ),
+                    "source": (
+                        "model_provider"
+                    ),
+                    "status": "success",
+                    "answer": (
+                        "Image generated."
+                    ),
+                    "data": {
+                        "action": (
+                            "Generated image."
+                        ),
+                        "explanation": (
+                            "Automatic routing "
+                            "selected an available "
+                            "image-generation model."
+                        ),
+                        "next_step": "",
+                        "provider": provider_id,
+                        "model": model_id,
+                        "execution": (
+                            "automatic_model_selection"
+                        ),
+                        "selection": selection,
+                        "output": {
+                            "type": "image",
+                            "mime_type": (
+                                mime_type
+                            ),
+                            "path": (
+                                output_path
+                            ),
+                            "data_url": (
+                                image_data_url
+                            ),
+                        },
+                    },
+                    "errors": [],
+                }
 
             return {
                 "capability": self.name,

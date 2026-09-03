@@ -1,3 +1,4 @@
+import GeneratedModelImage from "./GeneratedModelImage";
 import type {
   NaturalIntelligenceResponse,
 } from "../bridge/intelligenceBridge";
@@ -25,6 +26,10 @@ export default function IntelligenceResponsePanel({
       {response ? (
         <div className="natural-response natural-response-only">
           <p>{response.answer}</p>
+
+          <GeneratedModelImage
+            response={response}
+          />
 
           {response.results.length > 0 ? (
             <section className="result-section">
