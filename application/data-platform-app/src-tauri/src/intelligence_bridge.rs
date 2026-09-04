@@ -64,17 +64,33 @@ impl Drop for AutomaticRequestGuard {
     }
 }
 
+
+
 fn application_root() -> Result<PathBuf, String> {
-    if let Ok(root) = std::env::var("APPLICATION_ROOT") {
-        let path = PathBuf::from(root);
+    for variable in ["DATA_PLATFORM_ROOT", "APPLICATION_ROOT"] {
+        if let Ok(value) = std::env::var(variable) {
+            let value = value.trim();
+
+            if !value.is_empty() {
+                let path = PathBuf::from(value);
+
+                if application_root_is_valid(&path) {
+                    return Ok(path);
+                }
+            }
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let path = PathBuf::from(home).join("Data-Platform");
 
         if application_root_is_valid(&path) {
             return Ok(path);
         }
     }
 
-    if let Ok(current_directory) = std::env::current_dir() {
-        let mut candidate = current_directory;
+    if let Ok(current) = std::env::current_dir() {
+        let mut candidate = current;
 
         loop {
             if application_root_is_valid(&candidate) {
@@ -87,17 +103,8 @@ fn application_root() -> Result<PathBuf, String> {
         }
     }
 
-    let home = std::env::var("HOME")
-        .map_err(|error| format!("Could not read HOME environment variable: {}", error))?;
-
-    let path = PathBuf::from(home).join("Data-Platform");
-
-    if application_root_is_valid(&path) {
-        return Ok(path);
-    }
-
     Err(
-        "Application root was not found. Set APPLICATION_ROOT to the Data Platform directory."
+        "Application root was not found. Set DATA_PLATFORM_ROOT or APPLICATION_ROOT."
             .to_string(),
     )
 }
