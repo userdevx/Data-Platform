@@ -395,6 +395,14 @@ class GenerationJobService:
 
         return job_from_record(records[-1])
 
+    def artifact(
+        self,
+        artifact_id: str,
+    ) -> dict[str, Any] | None:
+        return self._store.artifact_record(
+            artifact_id
+        )
+
     def history(self, job_id: str) -> list[dict[str, Any]]:
         return [
             record.get("value", {})

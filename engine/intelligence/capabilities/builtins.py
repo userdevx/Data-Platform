@@ -781,6 +781,9 @@ class ModelReasoningCapability:
                     required_capability=(
                         required_capability
                     ),
+                    request_id=(
+                        request.request_id
+                    ),
                 )
             )
 

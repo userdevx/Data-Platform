@@ -130,6 +130,7 @@ def process_automatic_model_request(
     question: str,
     required_capability: str,
     arguments: dict[str, Any] | None = None,
+    request_id: str = "",
 ) -> dict[str, Any]:
     load_project_environment()
 
@@ -252,6 +253,7 @@ def process_automatic_model_request(
                     process_local_model_request(
                         question=clean_question,
                         model_id=model_id,
+                        request_id=request_id,
                         requested_capability=(
                             clean_capability
                         ),

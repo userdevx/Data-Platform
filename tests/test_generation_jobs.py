@@ -241,6 +241,58 @@ class RecordEnvelopeTests(unittest.TestCase):
         self.assertEqual(record["value"]["working_dimensions"], [512, 384])
 
 
+class ArtifactLookupTests(unittest.TestCase):
+    def test_artifact_can_be_recovered_by_identity(self) -> None:
+        store = InMemoryJobRecordStore()
+
+        job = new_job(
+            capability=TEST_CAPABILITY,
+            prompt=TEST_PROMPT,
+            profile=GenerationProfile(),
+            budget=derive_budget(
+                snapshot()
+            ).as_dict(),
+            hardware=snapshot().as_dict(),
+            model_id=TEST_MODEL_ID,
+        )
+
+        record = artifact_record(
+            job,
+            artifact_id="artifact-lookup",
+            relative_path=(
+                "data/model_outputs/images/"
+                "output.png"
+            ),
+            sha256="digest",
+            mime_type="image/png",
+            validation={
+                "structural": True,
+                "non_degenerate": True,
+            },
+        )
+
+        store.append(
+            record
+        )
+
+        recovered = store.artifact_record(
+            "artifact-lookup"
+        )
+
+        self.assertIsNotNone(
+            recovered
+        )
+
+        assert recovered is not None
+
+        self.assertEqual(
+            recovered["value"][
+                "artifact_id"
+            ],
+            "artifact-lookup",
+        )
+
+
 class ServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.store = InMemoryJobRecordStore()

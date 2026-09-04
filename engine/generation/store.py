@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any, Callable, Iterable, Protocol
 
 from .models import (
+    CATEGORY_ARTIFACT,
     CATEGORY_JOB_STATE,
+    DATA_TYPE_IMAGE_ARTIFACT,
     DATA_TYPE_JOB_STATUS,
     GenerationJob,
     JobState,
@@ -26,6 +28,12 @@ class JobRecordStore(Protocol):
 
     def find_by_idempotency_key(self, key: str) -> dict[str, Any] | None:
         """Return latest record for a job with this key, if any."""
+
+    def artifact_record(
+        self,
+        artifact_id: str,
+    ) -> dict[str, Any] | None:
+        """Return one persisted generation artifact."""
 
 
 class DataEngineJobRecordStore:
@@ -97,6 +105,46 @@ class DataEngineJobRecordStore:
             key=lambda record: record.get("value", {}).get("created_at", ""),
         )
 
+    def artifact_record(
+        self,
+        artifact_id: str,
+    ) -> dict[str, Any] | None:
+        clean_artifact_id = str(
+            artifact_id
+        ).strip()
+
+        if not clean_artifact_id:
+            return None
+
+        for record in self._query_records(
+            CATEGORY_ARTIFACT,
+            DATA_TYPE_IMAGE_ARTIFACT,
+        ):
+            if not isinstance(
+                record,
+                dict,
+            ):
+                continue
+
+            value = record.get(
+                "value",
+                {},
+            )
+
+            if (
+                isinstance(
+                    value,
+                    dict,
+                )
+                and value.get(
+                    "artifact_id"
+                )
+                == clean_artifact_id
+            ):
+                return record
+
+        return None
+
 
 class InMemoryJobRecordStore:
     """Test double. Not a runtime store."""
@@ -148,6 +196,44 @@ class InMemoryJobRecordStore:
     def find_by_idempotency_key(self, key: str) -> dict[str, Any] | None:
         for record in reversed(list(self._latest_per_job().values())):
             if record.get("value", {}).get("idempotency_key") == key:
+                return record
+
+        return None
+
+    def artifact_record(
+        self,
+        artifact_id: str,
+    ) -> dict[str, Any] | None:
+        clean_artifact_id = str(
+            artifact_id
+        ).strip()
+
+        for record in reversed(
+            self.records
+        ):
+            if (
+                record.get(
+                    "category"
+                )
+                != CATEGORY_ARTIFACT
+            ):
+                continue
+
+            value = record.get(
+                "value",
+                {},
+            )
+
+            if (
+                isinstance(
+                    value,
+                    dict,
+                )
+                and value.get(
+                    "artifact_id"
+                )
+                == clean_artifact_id
+            ):
                 return record
 
         return None
