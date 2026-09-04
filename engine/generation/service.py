@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -33,6 +35,7 @@ from .store import JobRecordStore, publish
 
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 120
 SPOOL_DIRECTORY = Path("var/generation/spool")
+RUNNER_PID_DIRECTORY = Path("var/generation/runners")
 SLOT_LOCK_PATH = Path("var/generation/slot.lock")
 
 JOB_RUNNER_MODULE = "engine.generation.job_runner"
@@ -195,6 +198,194 @@ class GenerationJobService:
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
+
+    def _runner_pid_path(
+        self,
+        job_id: str,
+    ) -> Path:
+        return (
+            self._project_root
+            / RUNNER_PID_DIRECTORY
+            / f"{job_id}.pid"
+        )
+
+    def _stop_worker_scope(
+        self,
+        job_id: str,
+    ) -> None:
+        unit_name = (
+            f"dp-generation-{job_id}.scope"
+        )
+
+        try:
+            subprocess.run(
+                [
+                    "systemctl",
+                    "--user",
+                    "stop",
+                    unit_name,
+                ],
+                cwd=self._project_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=False,
+            )
+        except (
+            OSError,
+            subprocess.TimeoutExpired,
+        ):
+            pass
+
+    @staticmethod
+    def _process_exists(
+        process_id: int,
+    ) -> bool:
+        try:
+            os.kill(
+                process_id,
+                0,
+            )
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+        return True
+
+    def _terminate_runner(
+        self,
+        job_id: str,
+    ) -> None:
+        pid_path = self._runner_pid_path(
+            job_id
+        )
+
+        try:
+            raw_pid = pid_path.read_text(
+                encoding="utf-8"
+            ).strip()
+        except OSError:
+            return
+
+        try:
+            process_id = int(
+                raw_pid
+            )
+        except ValueError:
+            pid_path.unlink(
+                missing_ok=True
+            )
+            return
+
+        if process_id <= 1:
+            pid_path.unlink(
+                missing_ok=True
+            )
+            return
+
+        self._stop_worker_scope(
+            job_id
+        )
+
+        try:
+            os.killpg(
+                process_id,
+                signal.SIGTERM,
+            )
+        except ProcessLookupError:
+            pid_path.unlink(
+                missing_ok=True
+            )
+            return
+        except PermissionError:
+            return
+
+        deadline = (
+            time.monotonic()
+            + 3.0
+        )
+
+        while (
+            self._process_exists(
+                process_id
+            )
+            and time.monotonic()
+            < deadline
+        ):
+            time.sleep(
+                0.05
+            )
+
+        if self._process_exists(
+            process_id
+        ):
+            try:
+                os.killpg(
+                    process_id,
+                    signal.SIGKILL,
+                )
+            except (
+                ProcessLookupError,
+                PermissionError,
+            ):
+                pass
+
+        pid_path.unlink(
+            missing_ok=True
+        )
+
+    def cancel(
+        self,
+        job_id: str,
+        *,
+        reason: FailureReason = (
+            FailureReason.USER
+        ),
+    ) -> GenerationJob | None:
+        current = self.get(
+            job_id
+        )
+
+        if current is None:
+            return None
+
+        if current.state in TERMINAL_STATES:
+            return current
+
+        cancelled = current.transition(
+            JobState.CANCELLED,
+            reason=reason,
+        )
+
+        publish(
+            self._store,
+            cancelled,
+        )
+
+        self._terminate_runner(
+            job_id
+        )
+
+        # Re-assert the terminal record after
+        # process termination. A heartbeat that
+        # was already in flight must not become
+        # the final lifecycle record.
+        latest = self.get(
+            job_id
+        )
+
+        if (
+            latest is None
+            or latest.state
+            is not JobState.CANCELLED
+        ):
+            publish(
+                self._store,
+                cancelled,
+            )
+
+        return cancelled
 
     def get(self, job_id: str) -> GenerationJob | None:
         records = self._store.job_records(job_id)

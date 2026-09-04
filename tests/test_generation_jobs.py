@@ -310,6 +310,83 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(rebuilt.profile.steps, job.profile.steps)
         self.assertEqual(rebuilt.state, JobState.QUEUED)
 
+    def test_cancel_marks_open_job_terminal(self) -> None:
+        job = self.submit()
+
+        cancelled = self.service.cancel(
+            job.job_id
+        )
+
+        self.assertIsNotNone(
+            cancelled
+        )
+
+        assert cancelled is not None
+
+        self.assertEqual(
+            cancelled.state,
+            JobState.CANCELLED,
+        )
+
+        self.assertEqual(
+            cancelled.reason,
+            FailureReason.USER.value,
+        )
+
+        recovered = self.service.get(
+            job.job_id
+        )
+
+        self.assertIsNotNone(
+            recovered
+        )
+
+        assert recovered is not None
+
+        self.assertEqual(
+            recovered.state,
+            JobState.CANCELLED,
+        )
+
+    def test_cancel_is_idempotent_for_terminal_job(self) -> None:
+        job = self.submit()
+
+        first = self.service.cancel(
+            job.job_id
+        )
+
+        second = self.service.cancel(
+            job.job_id
+        )
+
+        self.assertIsNotNone(
+            first
+        )
+
+        self.assertIsNotNone(
+            second
+        )
+
+        assert first is not None
+        assert second is not None
+
+        self.assertEqual(
+            first.state,
+            JobState.CANCELLED,
+        )
+
+        self.assertEqual(
+            second.state,
+            JobState.CANCELLED,
+        )
+
+    def test_cancel_unknown_job_returns_none(self) -> None:
+        self.assertIsNone(
+            self.service.cancel(
+                "missing-job"
+            )
+        )
+
 
 class PressureTests(unittest.TestCase):
     def test_missing_psi_is_unknown_and_admits(self) -> None:

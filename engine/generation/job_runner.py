@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import sys
 import threading
 import time
@@ -21,7 +22,11 @@ from .models import (
     artifact_record,
 )
 from .runner import CompletedRun, run_bounded
-from .service import SLOT_LOCK_PATH, job_from_spool
+from .service import (
+    RUNNER_PID_DIRECTORY,
+    SLOT_LOCK_PATH,
+    job_from_spool,
+)
 from .store import JobRecordStore, publish
 
 
@@ -54,6 +59,25 @@ def _acquire_slot(lock_path: Path, timeout_seconds: int):
             time.sleep(2)
 
 
+def _was_cancelled(
+    store: JobRecordStore,
+    job_id: str,
+) -> bool:
+    return any(
+        record.get(
+            "value",
+            {},
+        ).get(
+            "state"
+        )
+        == JobState.CANCELLED.value
+        for record
+        in store.job_records(
+            job_id
+        )
+    )
+
+
 class Heartbeat:
     def __init__(
         self,
@@ -70,10 +94,22 @@ class Heartbeat:
 
     def _loop(self) -> None:
         while not self._stop.wait(self._interval):
-            beating = replace(self._job, heartbeat_at=_utc_now())
+            if _was_cancelled(
+                self._store,
+                self._job.job_id,
+            ):
+                return
+
+            beating = replace(
+                self._job,
+                heartbeat_at=_utc_now(),
+            )
 
             try:
-                publish(self._store, beating)
+                publish(
+                    self._store,
+                    beating,
+                )
             except Exception:
                 pass
 
@@ -128,6 +164,15 @@ def _relative_to_root(path: str) -> str:
 
 
 def execute(job: GenerationJob, *, store: JobRecordStore) -> GenerationJob:
+    if _was_cancelled(
+        store,
+        job.job_id,
+    ):
+        return job.transition(
+            JobState.CANCELLED,
+            reason=FailureReason.USER,
+        )
+
     budget = ExecutionBudget(**job.budget)
     timeout_seconds = int(
         job.arguments.get("timeout_seconds", DEFAULT_JOB_TIMEOUT_SECONDS)
@@ -161,6 +206,15 @@ def execute(job: GenerationJob, *, store: JobRecordStore) -> GenerationJob:
         memory_peak_bytes=run.memory_peak_bytes,
         heartbeat_at=_utc_now(),
     )
+
+    if _was_cancelled(
+        store,
+        job.job_id,
+    ):
+        return job.transition(
+            JobState.CANCELLED,
+            reason=FailureReason.USER,
+        )
 
     payload = run.payload or {}
     succeeded = (
@@ -216,29 +270,134 @@ def main(argv: list[str]) -> int:
     job = job_from_spool(spool)
     store = build_job_record_store()
 
-    lock_path = PROJECT_ROOT / SLOT_LOCK_PATH
+    pid_directory = (
+        PROJECT_ROOT
+        / RUNNER_PID_DIRECTORY
+    )
+
+    pid_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    pid_path = (
+        pid_directory
+        / f"{job.job_id}.pid"
+    )
+
+    pid_path.write_text(
+        str(
+            os.getpid()
+        ),
+        encoding="utf-8",
+    )
+
+    handle = None
 
     try:
-        handle = _acquire_slot(lock_path, SLOT_WAIT_TIMEOUT_SECONDS)
-    except SlotBusyError as error:
-        job = job.transition(JobState.FAILED, reason=FailureReason.TIMEOUT)
-        job.arguments["failure_detail"] = str(error)
-        publish(store, job)
-        return 1
+        if _was_cancelled(
+            store,
+            job.job_id,
+        ):
+            return 1
 
-    try:
-        finished = execute(job, store=store)
-    except Exception as error:
-        job = job.transition(JobState.FAILED, reason=FailureReason.WORKER_ERROR)
-        job.arguments["failure_detail"] = repr(error)
-        publish(store, job)
-        return 1
+        lock_path = (
+            PROJECT_ROOT
+            / SLOT_LOCK_PATH
+        )
+
+        try:
+            handle = _acquire_slot(
+                lock_path,
+                SLOT_WAIT_TIMEOUT_SECONDS,
+            )
+        except SlotBusyError as error:
+            if _was_cancelled(
+                store,
+                job.job_id,
+            ):
+                return 1
+
+            job = job.transition(
+                JobState.FAILED,
+                reason=FailureReason.TIMEOUT,
+            )
+
+            job.arguments[
+                "failure_detail"
+            ] = str(
+                error
+            )
+
+            publish(
+                store,
+                job,
+            )
+
+            return 1
+
+        if _was_cancelled(
+            store,
+            job.job_id,
+        ):
+            return 1
+
+        try:
+            finished = execute(
+                job,
+                store=store,
+            )
+        except Exception as error:
+            if _was_cancelled(
+                store,
+                job.job_id,
+            ):
+                return 1
+
+            job = job.transition(
+                JobState.FAILED,
+                reason=(
+                    FailureReason
+                    .WORKER_ERROR
+                ),
+            )
+
+            job.arguments[
+                "failure_detail"
+            ] = repr(
+                error
+            )
+
+            publish(
+                store,
+                job,
+            )
+
+            return 1
+
+        return (
+            0
+            if finished.state
+            is JobState.SUCCEEDED
+            else 1
+        )
+
     finally:
-        fcntl.flock(handle, fcntl.LOCK_UN)
-        handle.close()
-        spool.unlink(missing_ok=True)
+        if handle is not None:
+            fcntl.flock(
+                handle,
+                fcntl.LOCK_UN,
+            )
 
-    return 0 if finished.state is JobState.SUCCEEDED else 1
+            handle.close()
+
+        pid_path.unlink(
+            missing_ok=True
+        )
+
+        spool.unlink(
+            missing_ok=True
+        )
 
 
 if __name__ == "__main__":
