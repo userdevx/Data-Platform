@@ -32,11 +32,10 @@ def test_generic_data_type_is_preserved():
     )
 
 
-def test_legacy_sensor_type_becomes_data_type():
+def test_missing_data_type_becomes_unknown_data():
     record = {
         "source": "runtime_device",
         "category": "runtime_category",
-        "sensor_type": "runtime_sensor",
         "value": True,
         "unit": "boolean",
     }
@@ -47,35 +46,22 @@ def test_legacy_sensor_type_becomes_data_type():
 
     assert (
         normalized["data_type"]
-        == "runtime_sensor"
-    )
-
-    assert (
-        normalized["sensor_type"]
-        == "runtime_sensor"
+        == "unknown_data"
     )
 
     assert (
         normalized["metadata"][
-            "original_sensor_type"
+            "original_data_type"
         ]
-        == "runtime_sensor"
-    )
-
-    assert (
-        normalized["metadata"][
-            "sensor_model"
-        ]
-        == "runtime_sensor"
+        == "unknown_data"
     )
 
 
-def test_data_type_is_preferred_over_sensor_type():
+def test_resolve_source_data_type_returns_data_type():
     record = {
         "source": "runtime_source",
         "category": "runtime_category",
         "data_type": "canonical_data",
-        "sensor_type": "legacy_data",
         "value": 1,
         "unit": "record",
     }
@@ -94,11 +80,6 @@ def test_data_type_is_preferred_over_sensor_type():
     assert (
         normalized["data_type"]
         == "canonical_data"
-    )
-
-    assert (
-        normalized["sensor_type"]
-        == "legacy_data"
     )
 
 

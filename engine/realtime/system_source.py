@@ -21,7 +21,7 @@ from engine.system.system_readers import (
 _REQUIRED_READER_FIELDS = {
     "source",
     "category",
-    "sensor_type",
+    "data_type",
     "value",
     "unit",
     "created_at",
@@ -80,8 +80,7 @@ class SystemRuntimeSource(
         return RealTimeObservation(
             source="system_runtime",
             category="runtime_observation",
-            data_type="runtime_metric",
-            sensor_type="system_snapshot",
+            data_type="system_snapshot",
             value=snapshot.to_dict(),
             unit="snapshot",
             observed_at=(

@@ -152,10 +152,6 @@ class RealTimeQueryService:
             and record.get(
                 "data_type"
             )
-            == "runtime_metric"
-            and record.get(
-                "sensor_type"
-            )
             == "system_snapshot"
         )
 

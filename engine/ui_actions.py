@@ -253,7 +253,7 @@ def create_database(database_name: str, selected_file_path: str) -> dict[str, An
     source_record = {
         "source": "application_runtime",
         "category": "source",
-        "sensor_type": "file_source",
+        "data_type": "file_source",
         "value": source_file.name,
         "unit": "file",
         "timestamp": now_utc(),
@@ -263,7 +263,7 @@ def create_database(database_name: str, selected_file_path: str) -> dict[str, An
     database_record = {
         "source": "application_runtime",
         "category": "database",
-        "sensor_type": "create_database",
+        "data_type": "create_database",
         "value": safe_name,
         "unit": "database",
         "timestamp": now_utc(),
@@ -273,7 +273,7 @@ def create_database(database_name: str, selected_file_path: str) -> dict[str, An
     raw_record = {
         "source": "application_runtime",
         "category": "lakehouse",
-        "sensor_type": "raw_file_import",
+        "data_type": "raw_file_import",
         "value": safe_name,
         "unit": "record",
         "timestamp": now_utc(),

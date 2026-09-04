@@ -54,7 +54,7 @@ function InternalDeveloperRightPanel({
 
       <section className="side-card">
         <h3>Validation Schema</h3>
-        <p><strong>Required:</strong> source, category, sensor_type</p>
+        <p><strong>Required:</strong> source, category, data_type</p>
         <p><strong>Format:</strong> normalized record</p>
       </section>
 

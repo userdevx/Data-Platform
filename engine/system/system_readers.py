@@ -11,7 +11,7 @@ def read_cpu() -> dict:
     return {
         "source": "system",
         "category": "device_status",
-        "sensor_type": "cpu_percent",
+        "data_type": "cpu_percent",
         "value": psutil.cpu_percent(interval=1),
         "unit": "%",
         "created_at": current_timestamp(),
@@ -24,7 +24,7 @@ def read_memory() -> dict:
     return {
         "source": "system",
         "category": "device_status",
-        "sensor_type": "memory_percent",
+        "data_type": "memory_percent",
         "value": memory.percent,
         "unit": "%",
         "created_at": current_timestamp(),
@@ -37,7 +37,7 @@ def read_disk() -> dict:
     return {
         "source": "system",
         "category": "device_status",
-        "sensor_type": "disk_percent",
+        "data_type": "disk_percent",
         "value": disk.percent,
         "unit": "%",
         "created_at": current_timestamp(),
@@ -52,7 +52,7 @@ def read_uptime() -> dict:
     return {
         "source": "system",
         "category": "device_status",
-        "sensor_type": "uptime_seconds",
+        "data_type": "uptime_seconds",
         "value": uptime_seconds,
         "unit": "seconds",
         "created_at": current_timestamp(),

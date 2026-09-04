@@ -20,7 +20,6 @@ class RealTimeObservation:
     source: str
     category: str
     data_type: str
-    sensor_type: str
     value: Any
     unit: str
 

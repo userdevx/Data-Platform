@@ -22,9 +22,6 @@ CATEGORY_ARTIFACT = "generation_artifact"
 DATA_TYPE_JOB_STATUS = "generation_job_status"
 DATA_TYPE_IMAGE_ARTIFACT = "image_artifact"
 
-SENSOR_JOB = "image_generation_job"
-SENSOR_ARTIFACT = "image_generation_output"
-
 UNIT_STATUS = "status"
 UNIT_ARTIFACT = "artifact"
 
@@ -230,7 +227,6 @@ def job_state_record(job: GenerationJob) -> dict[str, Any]:
         "source": RECORD_SOURCE,
         "category": CATEGORY_JOB_STATE,
         "data_type": DATA_TYPE_JOB_STATUS,
-        "sensor_type": SENSOR_JOB,
         "value": {
             "job_id": job.job_id,
             "request_id": job.request_id,
@@ -314,7 +310,6 @@ def artifact_record(
         "source": RECORD_SOURCE,
         "category": CATEGORY_ARTIFACT,
         "data_type": DATA_TYPE_IMAGE_ARTIFACT,
-        "sensor_type": SENSOR_ARTIFACT,
         "value": value,
         "unit": UNIT_ARTIFACT,
     }

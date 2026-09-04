@@ -21,12 +21,12 @@ export async function getRecentRecords(limit = 25): Promise<DataRecord[]> {
 }
 
 export async function queryRecords(
-  sensorType?: string,
+  dataType?: string,
   limit = 25
 ): Promise<DataRecord[]> {
   try {
     return await invoke<DataRecord[]>("query_records", {
-      sensorType,
+      dataType,
       limit
     });
   } catch (error) {

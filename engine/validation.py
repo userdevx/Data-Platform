@@ -9,15 +9,11 @@ REQUIRED_FIELDS = (
     "id",
     "source",
     "category",
+    "data_type",
     "value",
     "unit",
     "created_at",
     "updated_at",
-)
-
-TYPE_FIELDS = (
-    "data_type",
-    "sensor_type",
 )
 
 
@@ -29,14 +25,6 @@ def validate_required_fields(
             raise ValidationError(
                 f"Missing required field: {field}"
             )
-
-    if not any(
-        field in record
-        for field in TYPE_FIELDS
-    ):
-        raise ValidationError(
-            "Missing required field: data_type"
-        )
 
 
 def validate_id(
@@ -96,19 +84,6 @@ def resolve_data_type(
         and data_type.strip()
     ):
         return data_type.strip()
-
-    sensor_type = record.get(
-        "sensor_type"
-    )
-
-    if (
-        isinstance(
-            sensor_type,
-            str,
-        )
-        and sensor_type.strip()
-    ):
-        return sensor_type.strip()
 
     raise ValidationError(
         "Field 'data_type' must be a "

@@ -75,7 +75,7 @@ class DataEngineFacade:
         *,
         source: str | None = None,
         category: str | None = None,
-        sensor_type: str | None = None,
+        data_type: str | None = None,
         metadata_filters: dict[str, Any] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
@@ -91,7 +91,7 @@ class DataEngineFacade:
             if category is not None and record.get("category") != category:
                 continue
 
-            if sensor_type is not None and record.get("sensor_type") != sensor_type:
+            if data_type is not None and record.get("data_type") != data_type:
                 continue
 
             metadata = record.get("metadata", {})
@@ -152,7 +152,7 @@ class DataEngineFacade:
             "records": [
                 {
                     "record_id": record.get("record_id"),
-                    "sensor_type": record.get("sensor_type"),
+                    "data_type": record.get("data_type"),
                     "metadata": record.get("metadata", {}),
                     "value": record.get("value", {}),
                 }

@@ -43,8 +43,8 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
     return () => window.clearInterval(timer);
   }, []);
 
-  const sensorCount = useMemo(() => {
-    return new Set(records.map((record) => record.sensor_type)).size;
+  const dataTypeCount = useMemo(() => {
+    return new Set(records.map((record) => record.data_type)).size;
   }, [records]);
 
   const sourceCount = useMemo(() => {
@@ -64,7 +64,7 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
         </div>
 
         <div className="dashboard-search">
-          <span>Search records, sensors, queries...</span>
+          <span>Search records, data types, queries...</span>
           <kbd>Ctrl K</kbd>
         </div>
 
@@ -92,9 +92,9 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
           helper="Current view"
         />
         <StatusCard
-          label="Sensor Types"
-          value={`${sensorCount}`}
-          helper="Detected streams"
+          label="Data Types"
+          value={`${dataTypeCount}`}
+          helper="Detected information types"
         />
         <StatusCard
           label="Sources"
@@ -111,7 +111,7 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
           </div>
 
           <div className="code-window">
-            <div><span className="line-number">1</span><span className="keyword">SELECT</span> source, sensor_type, value, unit</div>
+            <div><span className="line-number">1</span><span className="keyword">SELECT</span> source, data_type, value, unit</div>
             <div><span className="line-number">2</span><span className="keyword">FROM</span> records</div>
             <div><span className="line-number">3</span><span className="keyword">WHERE</span> source = <span className="string">'system'</span></div>
             <div><span className="line-number">4</span><span className="keyword">ORDER BY</span> timestamp <span className="keyword">DESC</span></div>
@@ -121,7 +121,7 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
           <div className="record-table query-results-table">
             <div className="table-row table-head">
               <span>Source</span>
-              <span>Sensor</span>
+              <span>Data Type</span>
               <span>Value</span>
               <span>Unit</span>
             </div>
@@ -129,7 +129,7 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
             {records.slice(0, 5).map((record) => (
               <div className="table-row" key={record.id}>
                 <span>{record.source}</span>
-                <span>{record.sensor_type}</span>
+                <span>{record.data_type}</span>
                 <span>{String(record.value)}</span>
                 <span>{record.unit}</span>
               </div>
@@ -159,7 +159,7 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
               {records.slice(0, 8).map((record) => (
                 <div className="record-list-row" key={record.id}>
                   <div>
-                    <strong>{record.sensor_type}</strong>
+                    <strong>{record.data_type}</strong>
                     <span>{record.category}</span>
                   </div>
                   <div>{String(record.value)} {record.unit}</div>
@@ -218,8 +218,8 @@ function CenterWorkspace({ activeMode, activePage }: CenterWorkspaceProps) {
             <div className="activity-row">
               <span className="activity-dot info"></span>
               <div>
-                <strong>Latest sensor</strong>
-                <small>{latestRecord?.sensor_type ?? "No sensor data yet"}</small>
+                <strong>Latest data type</strong>
+                <small>{latestRecord?.data_type ?? "No data type available"}</small>
               </div>
             </div>
 

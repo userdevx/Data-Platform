@@ -56,7 +56,6 @@ class DataEngineRecordWriter:
         data_type: str,
         value: Any,
         unit: str,
-        sensor_type: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
         normalized_source = (
@@ -84,15 +83,6 @@ class DataEngineRecordWriter:
             self._require_text(
                 unit,
                 "unit",
-            )
-        )
-
-        normalized_sensor_type = (
-            None
-            if sensor_type is None
-            else self._require_text(
-                sensor_type,
-                "sensor_type",
             )
         )
 
@@ -132,16 +122,6 @@ class DataEngineRecordWriter:
                 )
 
                 stored = record.to_dict()
-
-                if (
-                    normalized_sensor_type
-                    is not None
-                ):
-                    stored[
-                        "sensor_type"
-                    ] = (
-                        normalized_sensor_type
-                    )
 
                 if normalized_metadata:
                     stored[

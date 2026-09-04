@@ -31,7 +31,7 @@ class InMemoryDataEngine:
         *,
         source: str | None = None,
         category: str | None = None,
-        sensor_type: str | None = None,
+        data_type: str | None = None,
         metadata_filters: dict[str, Any] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
@@ -44,7 +44,7 @@ class InMemoryDataEngine:
             if category and record.get("category") != category:
                 continue
 
-            if sensor_type and record.get("sensor_type") != sensor_type:
+            if data_type and record.get("data_type") != data_type:
                 continue
 
             metadata = record.get("metadata", {})

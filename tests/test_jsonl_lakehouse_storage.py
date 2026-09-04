@@ -15,7 +15,7 @@ def test_jsonl_append_backend_writes_lakehouse_file(
     record = {
         "source": "edge_device",
         "category": "motion",
-        "sensor_type": "pir_motion_sensor",
+        "data_type": "pir_motion_sensor",
         "value": True,
         "unit": "boolean",
     }
@@ -47,7 +47,7 @@ def test_jsonl_append_backend_writes_lakehouse_file(
     assert len(records) == 1
     assert records[0]["source"] == "edge_device"
     assert records[0]["category"] == "motion"
-    assert records[0]["sensor_type"] == "pir_motion_sensor"
+    assert records[0]["data_type"] == "pir_motion_sensor"
     assert records[0]["value"] is True
     assert records[0]["unit"] == "boolean"
 

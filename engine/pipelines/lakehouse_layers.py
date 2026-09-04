@@ -114,7 +114,7 @@ def silver_to_gold(namespace="motion_events"):
 
         gold_record = {
             "category": "analytics",
-            "sensor_type": "motion_summary",
+            "data_type": "motion_summary",
             "partition": partition,
             "motion_true_count": motion_true_count,
             "motion_false_count": motion_false_count,

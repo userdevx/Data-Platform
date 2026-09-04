@@ -27,7 +27,7 @@ def log_intelligence_allowed_action(
         {
             "source": "intelligence",
             "category": "security",
-            "sensor_type": "intelligence_allowed_execution_request",
+            "data_type": "intelligence_allowed_execution_request",
             "value": tool_name,
             "unit": "tool_name",
             "status": "allowed",
@@ -35,7 +35,7 @@ def log_intelligence_allowed_action(
             "requested_by": requested_by,
             "result_source": result.get("source"),
             "result_category": result.get("category"),
-            "result_sensor_type": result.get("sensor_type"),
+            "result_data_type": result.get("data_type"),
             "created_at": current_timestamp(),
         }
     )
@@ -51,7 +51,7 @@ def log_intelligence_blocked_action(
         {
             "source": "intelligence",
             "category": "security",
-            "sensor_type": "intelligence_blocked_execution_request",
+            "data_type": "intelligence_blocked_execution_request",
             "value": tool_name,
             "unit": "tool_name",
             "status": "blocked",

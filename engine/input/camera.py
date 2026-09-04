@@ -64,7 +64,7 @@ def get_camera_record(camera_index=0):
         "source": "system",
         "host": get_host(),
         "category": "media",
-        "sensor_type": "camera_image",
+        "data_type": "camera_image",
         "value": image_data["file_path"],
         "unit": "file_path",
         "metadata": {

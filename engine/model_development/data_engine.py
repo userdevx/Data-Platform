@@ -31,8 +31,6 @@ class ModelDevelopmentDataEngine:
 
     SOURCE = "model_development"
 
-    # Legacy physical compatibility field required by
-    # the current DataRecord envelope.
     CATEGORY = "model_development"
 
     def __init__(
@@ -71,7 +69,6 @@ class ModelDevelopmentDataEngine:
             source=self.SOURCE,
             category=self.CATEGORY,
             data_type=data_type,
-            sensor_type=data_type,
             value=value,
             unit="record",
             metadata=metadata,
@@ -203,7 +200,7 @@ class ModelDevelopmentDataEngine:
 
             if (
                 record.get(
-                    "data_type"
+                    "category"
                 )
                 != "structured_knowledge"
             ):
@@ -211,7 +208,7 @@ class ModelDevelopmentDataEngine:
 
             if (
                 record.get(
-                    "sensor_type"
+                    "data_type"
                 )
                 not in
                 ALLOWED_TRAINING_EVIDENCE_TYPES

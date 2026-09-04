@@ -40,7 +40,7 @@ def normalize_record(raw_record):
         "id": str(uuid.uuid4()),
         "source": raw_record.get("source", "arduino_uno_r4_wifi"),
         "category": raw_record.get("category", "motion"),
-        "sensor_type": raw_record.get("sensor_type", "hc_sr501_pir"),
+        "data_type": raw_record.get("data_type", "hc_sr501_pir"),
         "value": raw_record.get("value"),
         "unit": raw_record.get("unit", "boolean"),
         "timestamp": timestamp,

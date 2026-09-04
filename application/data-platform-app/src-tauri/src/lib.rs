@@ -91,7 +91,7 @@ struct DataRecord {
     id: String,
     source: String,
     category: String,
-    sensor_type: String,
+    data_type: String,
     value: Value,
     unit: String,
     timestamp: String,
@@ -223,7 +223,7 @@ fn normalize_data_record(record: &Map<String, Value>, fallback_index: usize) -> 
         },
         source: value_as_string(record.get("source")),
         category: value_as_string(record.get("category")),
-        sensor_type: value_as_string(record.get("sensor_type")),
+        data_type: value_as_string(record.get("data_type")),
         value: record.get("value").cloned().unwrap_or(Value::Null),
         unit: value_as_string(record.get("unit")),
         timestamp,
@@ -480,7 +480,7 @@ fn data_quality() -> Result<String, String> {
             let required = [
                 "source",
                 "category",
-                "sensor_type",
+                "data_type",
                 "value",
                 "unit",
                 "timestamp",
@@ -724,18 +724,18 @@ fn get_recent_records(limit: usize) -> Result<Vec<DataRecord>, String> {
 }
 
 #[tauri::command]
-fn query_records(sensor_type: Option<String>, limit: usize) -> Result<Vec<DataRecord>, String> {
+fn query_records(data_type: Option<String>, limit: usize) -> Result<Vec<DataRecord>, String> {
     let (_, records) = load_data_engine_records()?;
     let limit = normalize_record_limit(limit);
 
-    let normalized_sensor_type = sensor_type
+    let normalized_data_type = data_type
         .map(|value| value.trim().to_lowercase())
         .filter(|value| !value.is_empty());
 
     let filtered = records.into_iter().filter(|record| {
-        normalized_sensor_type
+        normalized_data_type
             .as_ref()
-            .map(|expected| record.sensor_type.to_lowercase() == *expected)
+            .map(|expected| record.data_type.to_lowercase() == *expected)
             .unwrap_or(true)
     });
 
@@ -885,7 +885,7 @@ fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionR
     let source_record = json!({
         "source": "application_interface",
         "category": "connected_source",
-        "sensor_type": "file_source",
+        "data_type": "file_source",
         "value": stored_path,
         "unit": "file_path",
         "timestamp": now,
@@ -904,7 +904,7 @@ fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionR
     let event_record = json!({
         "source": "application_interface",
         "category": "data_connection",
-        "sensor_type": "file_source",
+        "data_type": "file_source",
         "value": stored_path,
         "unit": "file_path",
         "timestamp": now,
@@ -921,7 +921,7 @@ fn connect_data(source_type: String, path: Option<String>) -> Result<ConnectionR
     let raw_record = json!({
         "source": "application_interface",
         "category": "raw",
-        "sensor_type": "file_source",
+        "data_type": "file_source",
         "value": stored_path,
         "unit": "file_path",
         "timestamp": now,
@@ -1004,7 +1004,7 @@ fn create_database(
     let record = json!({
         "source": "application_interface",
         "category": "database",
-        "sensor_type": "create_database",
+        "data_type": "create_database",
         "value": clean_name,
         "unit": "database",
         "timestamp": now,
@@ -1363,8 +1363,8 @@ fn workspace_action(
                             value["category"].as_str().unwrap_or("").to_string(),
                         ),
                         (
-                            "sensor_type",
-                            value["sensor_type"].as_str().unwrap_or("").to_string(),
+                            "data_type",
+                            value["data_type"].as_str().unwrap_or("").to_string(),
                         ),
                         ("value", value["value"].as_str().unwrap_or("").to_string()),
                     ]));

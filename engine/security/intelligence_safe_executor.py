@@ -32,7 +32,7 @@ def execute_intelligence_action(action_request: IntelligenceActionRequest) -> di
         return {
             "source": "intelligence",
             "category": "execution",
-            "sensor_type": "intelligence_execution_result",
+            "data_type": "intelligence_execution_result",
             "value": "success",
             "unit": "status",
             "status": "success",
@@ -55,7 +55,7 @@ def execute_intelligence_action(action_request: IntelligenceActionRequest) -> di
         return {
             "source": "intelligence",
             "category": "security",
-            "sensor_type": "intelligence_blocked_execution_request",
+            "data_type": "intelligence_blocked_execution_request",
             "value": action_request.tool_name,
             "unit": "tool_name",
             "status": "blocked",

@@ -48,14 +48,14 @@ def read_partition(
     return records
 
 
-def filter_records(records, source=None, sensor_type=None, category=None):
+def filter_records(records, source=None, data_type=None, category=None):
     results = []
 
     for record in records:
         if source is not None and record.get("source") != source:
             continue
 
-        if sensor_type is not None and record.get("sensor_type") != sensor_type:
+        if data_type is not None and record.get("data_type") != data_type:
             continue
 
         if category is not None and record.get("category") != category:
@@ -71,7 +71,7 @@ def query_lakehouse_partition(
     zone="raw",
     namespace="motion_events",
     source=None,
-    sensor_type=None,
+    data_type=None,
     category=None,
     base_dir="data_lake",
 ):
@@ -85,7 +85,7 @@ def query_lakehouse_partition(
     filtered_records = filter_records(
         records,
         source=source,
-        sensor_type=sensor_type,
+        data_type=data_type,
         category=category,
     )
 

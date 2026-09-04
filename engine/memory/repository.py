@@ -19,7 +19,7 @@ class DataEnginePort(Protocol):
         *,
         source: str | None = None,
         category: str | None = None,
-        sensor_type: str | None = None,
+        data_type: str | None = None,
         metadata_filters: dict[str, Any] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:

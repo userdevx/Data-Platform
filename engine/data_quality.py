@@ -7,13 +7,9 @@ from typing import Any
 REQUIRED_FIELDS = (
     "source",
     "category",
+    "data_type",
     "value",
     "unit",
-)
-
-TYPE_FIELDS = (
-    "data_type",
-    "sensor_type",
 )
 
 
@@ -29,16 +25,6 @@ def resolve_quality_data_type(
         and data_type.strip()
     ):
         return data_type.strip()
-
-    sensor_type = record.get(
-        "sensor_type"
-    )
-
-    if (
-        isinstance(sensor_type, str)
-        and sensor_type.strip()
-    ):
-        return sensor_type.strip()
 
     return None
 
@@ -75,14 +61,6 @@ def check_required_fields(
         for field in REQUIRED_FIELDS
         if field not in record
     ]
-
-    if not any(
-        field in record
-        for field in TYPE_FIELDS
-    ):
-        missing_fields.append(
-            "data_type"
-        )
 
     return missing_fields
 

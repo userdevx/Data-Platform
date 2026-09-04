@@ -36,7 +36,7 @@ def read_approved_file(path: str) -> dict:
     return {
         "source": "filesystem",
         "category": "approved_file",
-        "sensor_type": "file_text",
+        "data_type": "file_text",
         "value": content,
         "unit": "text",
         "path": str(file_path),

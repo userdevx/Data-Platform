@@ -23,7 +23,7 @@ class IntelligenceHistoryWriter:
         record = {
             "source": "intelligence",
             "category": "intelligence_history",
-            "sensor_type": "intelligence_response",
+            "data_type": "intelligence_response",
             "value": {
                 "request": request.to_dict(),
                 "response": response.to_dict(),

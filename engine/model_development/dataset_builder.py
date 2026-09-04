@@ -443,19 +443,6 @@ class ModelTrainingDatasetBuilder:
         ):
             return data_type.strip()
 
-        sensor_type = record.get(
-            "sensor_type"
-        )
-
-        if (
-            isinstance(
-                sensor_type,
-                str,
-            )
-            and sensor_type.strip()
-        ):
-            return sensor_type.strip()
-
         raise ValueError(
             "Source record does not contain "
             "a usable data_type."

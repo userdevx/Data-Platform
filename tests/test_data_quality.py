@@ -21,12 +21,12 @@ def valid_generic_record():
     }
 
 
-def valid_legacy_motion_record():
+def valid_motion_record():
     return {
         "id": 2,
         "source": "runtime_source",
         "category": "motion",
-        "sensor_type": "pir_motion_sensor",
+        "data_type": "pir_motion_sensor",
         "value": True,
         "unit": "boolean",
         "created_at": (
@@ -44,20 +44,16 @@ def test_generic_record_passes_quality():
     assert result["errors"] == []
 
 
-def test_legacy_sensor_type_remains_compatible():
+def test_motion_record_passes_quality():
     result = validate_data_quality(
-        valid_legacy_motion_record()
+        valid_motion_record()
     )
 
     assert result["valid"] is True
 
 
-def test_data_type_is_preferred():
+def test_resolve_quality_data_type_returns_data_type():
     record = valid_generic_record()
-
-    record["sensor_type"] = (
-        "legacy_runtime_data"
-    )
 
     assert (
         resolve_quality_data_type(
@@ -67,7 +63,7 @@ def test_data_type_is_preferred():
     )
 
 
-def test_missing_type_field_fails_quality():
+def test_missing_data_type_fails_quality():
     record = valid_generic_record()
 
     del record["data_type"]
@@ -139,7 +135,7 @@ def test_invalid_timestamp_fails_quality():
 
 def test_invalid_motion_value_fails_quality():
     record = (
-        valid_legacy_motion_record()
+        valid_motion_record()
     )
 
     record["value"] = "invalid"

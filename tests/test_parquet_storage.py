@@ -16,14 +16,14 @@ def test_parquet_backend_writes_and_reads_records(
         {
             "source": "edge_device",
             "category": "motion",
-            "sensor_type": "pir_motion_sensor",
+            "data_type": "pir_motion_sensor",
             "value": True,
             "unit": "boolean",
         },
         {
             "source": "edge_device",
             "category": "motion",
-            "sensor_type": "pir_motion_sensor",
+            "data_type": "pir_motion_sensor",
             "value": False,
             "unit": "boolean",
         },
@@ -50,6 +50,6 @@ def test_parquet_backend_writes_and_reads_records(
     assert len(stored_records) == 2
     assert stored_records[0]["source"] == "edge_device"
     assert stored_records[0]["category"] == "motion"
-    assert stored_records[0]["sensor_type"] == "pir_motion_sensor"
+    assert stored_records[0]["data_type"] == "pir_motion_sensor"
     assert stored_records[0]["value"] is True
     assert stored_records[1]["value"] is False

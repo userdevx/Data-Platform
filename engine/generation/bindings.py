@@ -68,7 +68,6 @@ def _write_generation_record(
         source=record["source"],
         category=record["category"],
         data_type=record["data_type"],
-        sensor_type=record.get("sensor_type"),
         value=record["value"],
         unit=record["unit"],
         metadata=record.get("metadata"),

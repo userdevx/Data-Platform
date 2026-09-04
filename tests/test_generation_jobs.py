@@ -192,7 +192,6 @@ class RecordEnvelopeTests(unittest.TestCase):
             "source",
             "category",
             "data_type",
-            "sensor_type",
             "value",
             "unit",
         ):

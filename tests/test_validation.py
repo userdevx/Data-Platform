@@ -20,34 +20,14 @@ def valid_generic_record():
     }
 
 
-def valid_legacy_record():
-    return {
-        "id": 2,
-        "source": "runtime_source",
-        "category": "runtime_category",
-        "sensor_type": "legacy_runtime_data",
-        "value": 1,
-        "unit": "runtime_unit",
-        "created_at": "2026-05-13T00:00:00+00:00",
-        "updated_at": "2026-05-13T00:00:00+00:00",
-    }
-
-
 def test_generic_data_type_record_passes_validation():
     assert validate_record(
         valid_generic_record()
     ) is True
 
 
-def test_legacy_sensor_type_record_remains_compatible():
-    assert validate_record(
-        valid_legacy_record()
-    ) is True
-
-
-def test_data_type_is_preferred_when_both_fields_exist():
+def test_resolve_data_type_returns_current_data_type():
     record = valid_generic_record()
-    record["sensor_type"] = "legacy_runtime_data"
 
     assert (
         resolve_data_type(record)
@@ -55,12 +35,13 @@ def test_data_type_is_preferred_when_both_fields_exist():
     )
 
 
-def test_missing_data_type_and_sensor_type_fails_validation():
+def test_missing_data_type_fails_validation():
     record = valid_generic_record()
     del record["data_type"]
 
     with pytest.raises(
-        ValidationError
+        ValidationError,
+        match="Missing required field: data_type",
     ):
         validate_record(record)
 

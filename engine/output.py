@@ -30,7 +30,10 @@ def paginate_records(records, page=1, limit=10):
 
 
 def get_record_data_type(record):
-    return record.get("data_type") or record.get("sensor_type", "")
+    return record.get(
+        "data_type",
+        "",
+    )
 
 
 def format_table(records):

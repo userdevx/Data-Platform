@@ -34,7 +34,7 @@ class FakeDataEngine:
         *,
         source: str | None = None,
         category: str | None = None,
-        sensor_type: str | None = None,
+        data_type: str | None = None,
         metadata_filters: dict[str, Any] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
@@ -54,11 +54,11 @@ class FakeDataEngine:
                 if record.get("category") == category
             ]
 
-        if sensor_type is not None:
+        if data_type is not None:
             records = [
                 record
                 for record in records
-                if record.get("sensor_type") == sensor_type
+                if record.get("data_type") == data_type
             ]
 
         for key, expected in (metadata_filters or {}).items():

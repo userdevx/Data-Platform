@@ -59,8 +59,7 @@ def build_observation(
     return RealTimeObservation(
         source=source,
         category="runtime_observation",
-        data_type="runtime_metric",
-        sensor_type="system_snapshot",
+        data_type="system_snapshot",
         value={
             "sequence": sequence,
         },
@@ -116,8 +115,7 @@ def process_writer(
     writer.write(
         source="test_runtime_source",
         category="runtime_observation",
-        data_type="runtime_metric",
-        sensor_type="system_snapshot",
+        data_type="system_snapshot",
         value={
             "sequence": sequence,
         },
@@ -181,11 +179,6 @@ def test_system_runtime_source_reads_real_system() -> None:
 
     assert (
         observation.data_type
-        == "runtime_metric"
-    )
-
-    assert (
-        observation.sensor_type
         == "system_snapshot"
     )
 
@@ -223,7 +216,7 @@ def test_system_runtime_source_reads_real_system() -> None:
         assert {
             "source",
             "category",
-            "sensor_type",
+            "data_type",
             "value",
             "unit",
             "created_at",
@@ -277,8 +270,7 @@ def test_writer_preserves_legacy_records(
     stored = writer.write(
         source="test_runtime_source",
         category="runtime_observation",
-        data_type="runtime_metric",
-        sensor_type="system_snapshot",
+        data_type="system_snapshot",
         value={
             "sequence": 3,
         },
@@ -342,11 +334,6 @@ def test_ingestion_persists_observation(
 
     assert (
         stored["data_type"]
-        == "runtime_metric"
-    )
-
-    assert (
-        stored["sensor_type"]
         == "system_snapshot"
     )
 

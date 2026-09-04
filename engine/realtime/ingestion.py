@@ -63,9 +63,6 @@ class RealTimeIngestionService:
             source=observation.source,
             category=observation.category,
             data_type=observation.data_type,
-            sensor_type=(
-                observation.sensor_type
-            ),
             value=observation.value,
             unit=observation.unit,
             metadata=metadata,

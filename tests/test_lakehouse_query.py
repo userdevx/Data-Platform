@@ -17,14 +17,14 @@ def test_query_lakehouse_partition_filters_records(
         {
             "source": "edge_device",
             "category": "motion",
-            "sensor_type": "pir_motion_sensor",
+            "data_type": "pir_motion_sensor",
             "value": True,
             "unit": "boolean",
         },
         {
             "source": "system",
             "category": "device_status",
-            "sensor_type": "cpu_temperature",
+            "data_type": "cpu_temperature",
             "value": 52.0,
             "unit": "C",
         },
@@ -41,7 +41,7 @@ def test_query_lakehouse_partition_filters_records(
         zone="raw",
         namespace="motion_events",
         partition="2026-05-15",
-        sensor_type="pir_motion_sensor",
+        data_type="pir_motion_sensor",
         base_dir=str(test_dir),
     )
 
@@ -53,6 +53,6 @@ def test_query_lakehouse_partition_filters_records(
 
     assert returned_record["source"] == "edge_device"
     assert returned_record["category"] == "motion"
-    assert returned_record["sensor_type"] == "pir_motion_sensor"
+    assert returned_record["data_type"] == "pir_motion_sensor"
     assert returned_record["value"] is True
     assert returned_record["unit"] == "boolean"

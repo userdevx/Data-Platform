@@ -17,13 +17,13 @@ def normalize_record(record):
     """
     Adds engine metadata to the Arduino JSON record.
     Arduino provides:
-    source, category, sensor_type, value, unit
+    source, category, data_type, value, unit
     """
 
     return {
         "source": record.get("source", "arduino_uno_r4_wifi"),
         "category": record.get("category", "motion"),
-        "sensor_type": record.get("sensor_type", "unknown"),
+        "data_type": record.get("data_type", "unknown"),
         "value": record.get("value"),
         "unit": record.get("unit", "unknown"),
         "timestamp": utc_now(),

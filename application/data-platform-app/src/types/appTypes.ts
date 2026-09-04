@@ -25,7 +25,7 @@ export type DataRecord = {
   id: string;
   source: string;
   category: string;
-  sensor_type: string;
+  data_type: string;
   value: string | number | boolean | null | Record<string, unknown>;
   unit: string;
   timestamp: string;

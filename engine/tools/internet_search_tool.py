@@ -232,7 +232,7 @@ def search_web(query: str, limit: int = 5) -> dict[str, Any]:
     return {
         "source": "internet",
         "category": "search",
-        "sensor_type": "internet_search_results",
+        "data_type": "internet_search_results",
         "value": clean_query,
         "unit": "query",
         "status": "complete",
@@ -357,7 +357,7 @@ def read_web_page(url: str, title: str = "") -> dict[str, Any]:
     return {
         "source": "internet",
         "category": "web_page",
-        "sensor_type": "internet_full_page",
+        "data_type": "internet_full_page",
         "value": final_url,
         "unit": "url",
         "status": "complete",

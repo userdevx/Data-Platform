@@ -32,14 +32,14 @@ def extract_temperature(line):
         return None
 
 
-def build_record(sensor_type, value, unit="C"):
+def build_record(data_type, value, unit="C"):
     now = current_timestamp()
 
     return {
         "source": "system",
         "host": get_host(),
         "category": "device_status",
-        "sensor_type": sensor_type,
+        "data_type": data_type,
         "value": value,
         "unit": unit,
         "created_at": now,

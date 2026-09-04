@@ -72,7 +72,7 @@ class SourceCrawlerSpider(scrapy.Spider):
         record = {
             "source": "internet",
             "category": "crawled_page",
-            "sensor_type": "scrapy_page",
+            "data_type": "scrapy_page",
             "value": response.url,
             "unit": "url",
             "metadata": {

@@ -16,16 +16,6 @@ def resolve_source_data_type(
     ):
         return data_type.strip()
 
-    sensor_type = record.get(
-        "sensor_type"
-    )
-
-    if (
-        isinstance(sensor_type, str)
-        and sensor_type.strip()
-    ):
-        return sensor_type.strip()
-
     return "unknown_data"
 
 
@@ -60,12 +50,6 @@ def normalize_source_record(
     original_data_type = (
         resolve_source_data_type(
             normalized
-        )
-    )
-
-    legacy_sensor_type = (
-        normalized.get(
-            "sensor_type"
         )
     )
 
@@ -144,40 +128,6 @@ def normalize_source_record(
     metadata[
         "original_data_type"
     ] = original_data_type
-
-    if (
-        isinstance(
-            legacy_sensor_type,
-            str,
-        )
-        and legacy_sensor_type.strip()
-    ):
-        clean_sensor_type = (
-            legacy_sensor_type.strip()
-        )
-
-        normalized[
-            "sensor_type"
-        ] = clean_sensor_type
-
-        metadata[
-            "original_sensor_type"
-        ] = clean_sensor_type
-
-        sensor_model = metadata.get(
-            "sensor_model"
-        )
-
-        if (
-            not isinstance(
-                sensor_model,
-                str,
-            )
-            or not sensor_model.strip()
-        ):
-            metadata[
-                "sensor_model"
-            ] = clean_sensor_type
 
     normalized[
         "metadata"
