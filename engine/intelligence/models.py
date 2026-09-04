@@ -113,14 +113,25 @@ class IntelligenceRequest:
         question: str,
         source: str,
         metadata: dict[str, Any] | None = None,
+        request_id: str = "",
     ) -> "IntelligenceRequest":
         cleaned = question.strip()
 
         if not cleaned:
             raise ValueError("The intelligence request cannot be empty.")
 
+        clean_request_id = str(
+            request_id
+        ).strip()
+
         return cls(
-            request_id=f"intelligence_request_{uuid4().hex[:16]}",
+            request_id=(
+                clean_request_id
+                or (
+                    "intelligence_request_"
+                    f"{uuid4().hex[:16]}"
+                )
+            ),
             created_at=utc_now_iso(),
             source=source,
             question=cleaned,

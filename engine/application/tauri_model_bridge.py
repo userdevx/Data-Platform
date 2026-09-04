@@ -7,6 +7,12 @@ import sys
 from engine.application.model_options_action import (
     get_model_options,
 )
+from engine.generation.bindings import (
+    build_job_record_store,
+)
+from engine.generation.service import (
+    GenerationJobService,
+)
 from engine.application.model_request_action import (
     process_manual_model_request,
 )
@@ -72,6 +78,24 @@ def parse_arguments() -> argparse.Namespace:
         default="{}",
     )
 
+    ask_parser.add_argument(
+        "--request-id",
+        default="",
+    )
+
+    cancel_parser = subparsers.add_parser(
+        "cancel-generation",
+        help=(
+            "Cancel generation work for "
+            "one application request."
+        ),
+    )
+
+    cancel_parser.add_argument(
+        "--request-id",
+        required=True,
+    )
+
     return parser.parse_args()
 
 
@@ -90,6 +114,33 @@ def main() -> int:
                 model_python=MODEL_PYTHON,
                 project_root=PROJECT_ROOT,
             )
+
+        elif (
+            arguments.command
+            == "cancel-generation"
+        ):
+            service = GenerationJobService(
+                store=build_job_record_store(),
+                project_root=PROJECT_ROOT,
+            )
+
+            cancelled = service.cancel_request(
+                arguments.request_id
+            )
+
+            result = {
+                "status": "success",
+                "request_id": (
+                    arguments.request_id
+                ),
+                "cancelled_count": len(
+                    cancelled
+                ),
+                "cancelled_job_ids": [
+                    job.job_id
+                    for job in cancelled
+                ],
+            }
 
         else:
             request_arguments = json.loads(
@@ -110,6 +161,9 @@ def main() -> int:
                 option_id=arguments.option_id,
                 capability=arguments.capability,
                 arguments=request_arguments,
+                request_id=(
+                    arguments.request_id
+                ),
             )
 
         print(

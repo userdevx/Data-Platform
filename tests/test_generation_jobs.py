@@ -439,6 +439,78 @@ class ServiceTests(unittest.TestCase):
             )
         )
 
+    def test_cancel_request_cancels_matching_job(self) -> None:
+        job = self.service.submit(
+            capability=TEST_CAPABILITY,
+            prompt=TEST_PROMPT,
+            model_id=TEST_MODEL_ID,
+            request_id="application-request-1",
+            detach=False,
+        )
+
+        cancelled = (
+            self.service.cancel_request(
+                "application-request-1"
+            )
+        )
+
+        self.assertEqual(
+            len(cancelled),
+            1,
+        )
+
+        self.assertEqual(
+            cancelled[0].job_id,
+            job.job_id,
+        )
+
+        self.assertEqual(
+            cancelled[0].state,
+            JobState.CANCELLED,
+        )
+
+    def test_cancel_request_does_not_cancel_other_request(self) -> None:
+        first = self.service.submit(
+            capability=TEST_CAPABILITY,
+            prompt="first request",
+            model_id=TEST_MODEL_ID,
+            request_id="application-request-1",
+            detach=False,
+        )
+
+        second = self.service.submit(
+            capability=TEST_CAPABILITY,
+            prompt="second request",
+            model_id=TEST_MODEL_ID,
+            request_id="application-request-2",
+            detach=False,
+        )
+
+        self.service.cancel_request(
+            "application-request-1"
+        )
+
+        first_result = self.service.get(
+            first.job_id
+        )
+
+        second_result = self.service.get(
+            second.job_id
+        )
+
+        assert first_result is not None
+        assert second_result is not None
+
+        self.assertEqual(
+            first_result.state,
+            JobState.CANCELLED,
+        )
+
+        self.assertEqual(
+            second_result.state,
+            JobState.QUEUED,
+        )
+
 
 class PressureTests(unittest.TestCase):
     def test_missing_psi_is_unknown_and_admits(self) -> None:

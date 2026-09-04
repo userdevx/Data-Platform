@@ -387,6 +387,77 @@ class GenerationJobService:
 
         return cancelled
 
+    def jobs_for_request(
+        self,
+        request_id: str,
+    ) -> list[GenerationJob]:
+        clean_request_id = str(
+            request_id
+        ).strip()
+
+        if not clean_request_id:
+            return []
+
+        matches: list[GenerationJob] = []
+
+        for record in self._store.open_jobs():
+            value = record.get(
+                "value",
+                {},
+            )
+
+            if not isinstance(
+                value,
+                dict,
+            ):
+                continue
+
+            if (
+                str(
+                    value.get(
+                        "request_id",
+                        "",
+                    )
+                ).strip()
+                != clean_request_id
+            ):
+                continue
+
+            matches.append(
+                job_from_record(
+                    record
+                )
+            )
+
+        return matches
+
+    def cancel_request(
+        self,
+        request_id: str,
+        *,
+        reason: FailureReason = (
+            FailureReason.USER
+        ),
+    ) -> list[GenerationJob]:
+        cancelled: list[
+            GenerationJob
+        ] = []
+
+        for job in self.jobs_for_request(
+            request_id
+        ):
+            result = self.cancel(
+                job.job_id,
+                reason=reason,
+            )
+
+            if result is not None:
+                cancelled.append(
+                    result
+                )
+
+        return cancelled
+
     def get(self, job_id: str) -> GenerationJob | None:
         records = self._store.job_records(job_id)
 

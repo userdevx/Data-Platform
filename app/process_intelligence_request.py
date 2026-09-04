@@ -58,6 +58,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stable identifier for the current conversation.",
     )
 
+    parser.add_argument(
+        "--request-id",
+        default="",
+        help=(
+            "Stable identifier supplied by "
+            "the Application Interface."
+        ),
+    )
+
     return parser
 
 
@@ -175,6 +184,7 @@ def main() -> int:
             question=question,
             source=args.source,
             metadata=request_metadata,
+            request_id=args.request_id,
         )
 
         response = instance.process(request)

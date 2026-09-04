@@ -176,6 +176,7 @@ def process_manual_model_request(
     option_id: str,
     capability: str = "",
     arguments: dict[str, Any] | None = None,
+    request_id: str = "",
 ) -> dict[str, Any]:
     load_project_environment()
 
@@ -232,6 +233,7 @@ def process_manual_model_request(
             arguments=dict(
                 arguments or {}
             ),
+            request_id=request_id,
         )
 
     configuration = (
