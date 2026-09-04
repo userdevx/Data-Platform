@@ -21,6 +21,7 @@ import {
 
 export type ModelRequestInput = {
   request: string;
+  requestId: string;
   model: ModelOption;
   definitionPath: string;
 };
@@ -28,11 +29,13 @@ export type ModelRequestInput = {
 
 async function submitAutomaticRequest(
   request: string,
+  requestId: string,
   definitionPath: string,
 ): Promise<NaturalIntelligenceResponse> {
   return processNaturalIntelligenceRequest(
     request,
     definitionPath,
+    requestId,
   );
 }
 
@@ -45,6 +48,7 @@ async function submitManualRequest(
     input.model.option_id,
     "",
     {},
+    input.requestId,
   );
 }
 
@@ -59,6 +63,7 @@ export async function submitModelRequest(
   ) {
     return submitAutomaticRequest(
       input.request,
+      input.requestId,
       input.definitionPath,
     );
   }

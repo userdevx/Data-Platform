@@ -1670,6 +1670,7 @@ pub fn run() {
             get_recent_records,
             query_records,
             intelligence_bridge::process_intelligence_request,
+            intelligence_bridge::cancel_intelligence_request,
             intelligence_bridge::get_intelligence_definition,
             intelligence_bridge::update_memory_settings,
             intelligence_bridge::update_permission_settings,

@@ -118,10 +118,12 @@ function getSearchResults(value: unknown): IntelligenceSearchResult[] {
 export async function processIntelligenceRequest(
   question: string,
   definition: string = DEFAULT_INTELLIGENCE_DEFINITION,
+  requestId: string = "",
 ): Promise<IntelligenceResponse> {
   const raw = await invoke<string>("process_intelligence_request", {
     question,
     definition,
+    requestId,
   });
 
   return JSON.parse(raw) as IntelligenceResponse;
@@ -130,8 +132,13 @@ export async function processIntelligenceRequest(
 export async function processNaturalIntelligenceRequest(
   question: string,
   definition: string = DEFAULT_INTELLIGENCE_DEFINITION,
+  requestId: string = "",
 ): Promise<NaturalIntelligenceResponse> {
-  const response = await processIntelligenceRequest(question, definition);
+  const response = await processIntelligenceRequest(
+    question,
+    definition,
+    requestId,
+  );
 
   return {
     answer: cleanAnswer(response.answer),
@@ -140,6 +147,18 @@ export async function processNaturalIntelligenceRequest(
     raw: response,
   };
 }
+
+export async function cancelIntelligenceRequest(
+  requestId: string,
+): Promise<string> {
+  return invoke<string>(
+    "cancel_intelligence_request",
+    {
+      requestId,
+    },
+  );
+}
+
 
 export async function getIntelligenceDefinition(
   definition: string = DEFAULT_INTELLIGENCE_DEFINITION,

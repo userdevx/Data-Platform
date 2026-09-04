@@ -34,6 +34,7 @@ export type IntelligenceAskPanelProps = {
   ) => void;
 
   onAsk: () => void;
+  onCancel: () => void;
 };
 
 
@@ -51,6 +52,7 @@ export default function IntelligenceAskPanel({
   onRequestChange,
   onAttachmentChange,
   onAsk,
+  onCancel,
 }: IntelligenceAskPanelProps) {
   return (
     <article className="panel ask-panel">
@@ -92,15 +94,18 @@ export default function IntelligenceAskPanel({
         <button
           type="button"
           className="primary-button"
-          onClick={onAsk}
-          disabled={
+          onClick={
             runtimeStatus === "thinking"
-            || modelsLoading
+              ? onCancel
+              : onAsk
+          }
+          disabled={
+            modelsLoading
             || !selectedModel
           }
         >
           {runtimeStatus === "thinking"
-            ? "Working"
+            ? "Cancel"
             : "Ask"}
         </button>
       </div>

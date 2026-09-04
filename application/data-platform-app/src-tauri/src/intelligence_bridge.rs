@@ -1,19 +1,37 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const DEFAULT_DEFINITION_PATH: &str = "config/intelligence/active.json";
 
 const DEFAULT_REQUEST_TIMEOUT_SECONDS: u64 = 60;
+const GENERATION_SAFE_REQUEST_TIMEOUT_SECONDS: u64 = 1900;
 
 const DEFAULT_MAXIMUM_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
 
 const PROCESS_POLL_INTERVAL_MILLISECONDS: u64 = 50;
 
 static AUTOMATIC_REQUEST_RUNNING: AtomicBool = AtomicBool::new(false);
+
+static AUTOMATIC_CANCEL_REQUESTED: AtomicBool =
+    AtomicBool::new(false);
+
+static AUTOMATIC_ACTIVE_CHILD:
+    OnceLock<Mutex<Option<Arc<Mutex<Child>>>>> =
+    OnceLock::new();
+
+
+fn automatic_active_child(
+) -> &'static Mutex<Option<Arc<Mutex<Child>>>> {
+    AUTOMATIC_ACTIVE_CHILD.get_or_init(
+        || Mutex::new(None)
+    )
+}
+
 
 struct AutomaticRequestGuard;
 
@@ -23,13 +41,26 @@ impl AutomaticRequestGuard {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| "An Automatic intelligence request is already running.".to_string())?;
 
+        AUTOMATIC_CANCEL_REQUESTED.store(
+            false,
+            Ordering::SeqCst,
+        );
+
         Ok(Self)
     }
 }
 
 impl Drop for AutomaticRequestGuard {
     fn drop(&mut self) {
-        AUTOMATIC_REQUEST_RUNNING.store(false, Ordering::SeqCst);
+        AUTOMATIC_REQUEST_RUNNING.store(
+            false,
+            Ordering::SeqCst,
+        );
+
+        AUTOMATIC_CANCEL_REQUESTED.store(
+            false,
+            Ordering::SeqCst,
+        );
     }
 }
 
@@ -94,12 +125,65 @@ fn python_binary(root: &Path) -> PathBuf {
     PathBuf::from("python3")
 }
 
+fn cancel_generation_for_request(
+    root: &Path,
+    request_id: &str,
+) -> Result<(), String> {
+    let clean_request_id =
+        request_id.trim();
+
+    if clean_request_id.is_empty() {
+        return Err(
+            "A request ID is required for cancellation."
+                .to_string(),
+        );
+    }
+
+    let status = Command::new(
+        python_binary(root)
+    )
+    .current_dir(root)
+    .env("PYTHONPATH", root)
+    .env("PYTHONUNBUFFERED", "1")
+    .arg("-m")
+    .arg(
+        "engine.application.tauri_model_bridge"
+    )
+    .arg("cancel-generation")
+    .arg("--request-id")
+    .arg(clean_request_id)
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .map_err(|error| {
+        format!(
+            "Could not start GenerationJob cancellation: {}",
+            error
+        )
+    })?;
+
+    if !status.success() {
+        return Err(
+            format!(
+                "GenerationJob cancellation failed with status {}.",
+                status
+            )
+        );
+    }
+
+    Ok(())
+}
+
+
 fn request_timeout() -> Duration {
     let seconds = std::env::var("INTELLIGENCE_REQUEST_TIMEOUT_SECONDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECONDS);
+        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECONDS)
+        .max(
+            GENERATION_SAFE_REQUEST_TIMEOUT_SECONDS
+        );
 
     Duration::from_secs(seconds)
 }
@@ -155,62 +239,120 @@ fn join_stream_reader(
     })?
 }
 
+fn store_automatic_child(
+    child: Arc<Mutex<Child>>,
+) -> Result<(), String> {
+    let mut active =
+        automatic_active_child()
+            .lock()
+            .map_err(
+                |_| (
+                    "The automatic worker state lock is unavailable."
+                ).to_string()
+            )?;
+
+    *active = Some(child);
+
+    Ok(())
+}
+
+
+fn clear_automatic_child(
+    child: &Arc<Mutex<Child>>,
+) {
+    if let Ok(mut active) =
+        automatic_active_child().lock()
+    {
+        let should_clear = active
+            .as_ref()
+            .map(
+                |current|
+                    Arc::ptr_eq(
+                        current,
+                        child,
+                    )
+            )
+            .unwrap_or(false);
+
+        if should_clear {
+            *active = None;
+        }
+    }
+}
+
+
+fn terminate_automatic_child(
+    child: &Arc<Mutex<Child>>,
+) {
+    if let Ok(mut process) =
+        child.lock()
+    {
+        let _ = process.kill();
+        let _ = process.wait();
+    }
+}
+
+
 fn wait_for_process(
-    child: &mut std::process::Child,
+    child: &Arc<Mutex<Child>>,
     timeout: Duration,
 ) -> Result<ExitStatus, String> {
     let started_at = Instant::now();
 
     loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                return Ok(status);
-            }
+        if AUTOMATIC_CANCEL_REQUESTED.load(
+            Ordering::SeqCst,
+        ) {
+            terminate_automatic_child(
+                child
+            );
 
-            Ok(None) => {}
+            return Err(
+                "The request was cancelled."
+                    .to_string()
+            );
+        }
 
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+        let status = {
+            let mut process =
+                child.lock().map_err(
+                    |_| (
+                        "The Intelligence Runtime process lock is unavailable."
+                    ).to_string()
+                )?;
 
-                return Err(format!(
-                    "Could not read Intelligence Runtime process status: {}",
-                    error
-                ));
-            }
+            process.try_wait().map_err(
+                |error| {
+                    format!(
+                        "Could not read Intelligence Runtime process status: {}",
+                        error
+                    )
+                }
+            )?
+        };
+
+        if let Some(exit_status) = status {
+            return Ok(exit_status);
         }
 
         if started_at.elapsed() >= timeout {
-            let process_id = child.id();
+            terminate_automatic_child(
+                child
+            );
 
-            let kill_result = child.kill();
-            let wait_result = child.wait();
-
-            if let Err(error) = kill_result {
-                return Err(format!(
-                    "Intelligence Runtime exceeded its {} second timeout, but process {} could not be terminated: {}",
-                    timeout.as_secs(),
-                    process_id,
-                    error
-                ));
-            }
-
-            if let Err(error) = wait_result {
-                return Err(format!(
-                    "Intelligence Runtime exceeded its {} second timeout. Process {} was terminated, but cleanup failed: {}",
-                    timeout.as_secs(),
-                    process_id,
-                    error
-                ));
-            }
-
-            return Err(format!(
-                "Intelligence Runtime exceeded its {} second timeout and was terminated.",
-                timeout.as_secs()
-            ));
+            return Err(
+                format!(
+                    "Intelligence Runtime exceeded its {} second timeout and was terminated.",
+                    timeout.as_secs()
+                )
+            );
         }
 
-        thread::sleep(Duration::from_millis(PROCESS_POLL_INTERVAL_MILLISECONDS));
+        thread::sleep(
+            Duration::from_millis(
+                PROCESS_POLL_INTERVAL_MILLISECONDS
+            )
+        );
     }
 }
 
@@ -218,6 +360,7 @@ fn run_intelligence_request(
     question: String,
     definition: Option<String>,
     conversation_id: Option<String>,
+    request_id: String,
 ) -> Result<String, String> {
     let root = application_root()?;
 
@@ -261,6 +404,15 @@ fn run_intelligence_request(
             .arg(conversation_id);
     }
 
+    let clean_request_id =
+        request_id.trim().to_string();
+
+    if !clean_request_id.is_empty() {
+        command
+            .arg("--request-id")
+            .arg(clean_request_id);
+    }
+
     let mut child = command
         .arg(question)
         .stdout(Stdio::piped())
@@ -286,7 +438,26 @@ fn run_intelligence_request(
 
     let stderr_reader = thread::spawn(move || read_bounded_stream(stderr, output_limit, "stderr"));
 
-    let process_result = wait_for_process(&mut child, timeout);
+    let shared_child =
+        Arc::new(
+            Mutex::new(child)
+        );
+
+    store_automatic_child(
+        Arc::clone(
+            &shared_child
+        )
+    )?;
+
+    let process_result =
+        wait_for_process(
+            &shared_child,
+            timeout,
+        );
+
+    clear_automatic_child(
+        &shared_child
+    );
 
     let stdout_result = join_stream_reader(stdout_reader, "stdout");
 
@@ -342,6 +513,7 @@ pub async fn process_intelligence_request(
     question: String,
     definition: Option<String>,
     conversation_id: Option<String>,
+    request_id: String,
 ) -> Result<String, String> {
     /*
      * Acquire this before starting the worker so
@@ -357,11 +529,53 @@ pub async fn process_intelligence_request(
             question,
             definition,
             conversation_id,
+            request_id,
         )
     })
     .await
     .map_err(|error| format!("The Automatic intelligence worker task failed: {}", error))?
 }
+
+#[tauri::command]
+pub fn cancel_intelligence_request(
+    request_id: String,
+) -> Result<String, String> {
+    let root =
+        application_root()?;
+
+    cancel_generation_for_request(
+        &root,
+        &request_id,
+    )?;
+
+    AUTOMATIC_CANCEL_REQUESTED.store(
+        true,
+        Ordering::SeqCst,
+    );
+
+    let active =
+        automatic_active_child()
+            .lock()
+            .map_err(
+                |_| (
+                    "The automatic worker lock is unavailable."
+                ).to_string()
+            )?
+            .as_ref()
+            .cloned();
+
+    if let Some(child) = active {
+        terminate_automatic_child(
+            &child
+        );
+    }
+
+    Ok(
+        "Cancellation was requested."
+            .to_string()
+    )
+}
+
 
 #[tauri::command]
 pub async fn update_memory_settings(

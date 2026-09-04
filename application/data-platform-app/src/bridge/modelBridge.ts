@@ -125,6 +125,7 @@ export async function processManualModelRequest(
   optionId: string,
   capability: string = "",
   requestArguments: Record<string, unknown> = {},
+  requestId: string = "",
 ): Promise<NaturalIntelligenceResponse> {
   try {
     const raw = await invoke<string>(
@@ -136,6 +137,7 @@ export async function processManualModelRequest(
         argumentsJson: JSON.stringify(
           requestArguments,
         ),
+        requestId,
       },
     );
 
@@ -172,11 +174,15 @@ export async function processManualModelRequest(
 }
 
 
-export async function cancelManualModelRequest():
-  Promise<string> {
+export async function cancelManualModelRequest(
+  requestId: string,
+): Promise<string> {
   try {
     return await invoke<string>(
       "cancel_manual_model_request",
+      {
+        requestId,
+      },
     );
   } catch (error) {
     throw normalizeBridgeError(error);

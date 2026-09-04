@@ -12,6 +12,7 @@ import IntelligenceOutputPanel from "../components/IntelligenceOutputPanel";
 
 
 import {
+  cancelIntelligenceRequest,
   getIntelligenceDefinition,
   processNaturalIntelligenceRequest,
   type NaturalIntelligenceResponse,
@@ -162,6 +163,13 @@ export default function ButtonInterfacePage() {
     attachmentPaths,
     setAttachmentPaths,
   ] = useState<string[]>([]);
+
+  const [
+    activeRequestId,
+    setActiveRequestId,
+  ] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -351,6 +359,55 @@ export default function ButtonInterfacePage() {
     }
   }
 
+  async function handleCancel(): Promise<void> {
+    const requestId =
+      activeRequestId;
+
+    if (!requestId) {
+      return;
+    }
+
+    try {
+      if (
+        selectedModelId
+        === "automatic"
+      ) {
+        await cancelIntelligenceRequest(
+          requestId,
+        );
+      } else {
+        await cancelManualModelRequest(
+          requestId,
+        );
+      }
+
+      setLogs((current) => [
+        createLog(
+          "Cancellation requested",
+          "info",
+        ),
+        ...current,
+      ].slice(0, 100));
+
+    } catch (error) {
+      const message =
+        getErrorMessage(error);
+
+      setErrorMessage(
+        message,
+      );
+
+      setLogs((current) => [
+        createLog(
+          "Cancellation failed",
+          "error",
+        ),
+        ...current,
+      ].slice(0, 100));
+    }
+  }
+
+
   async function handleAsk(): Promise<void> {
     if (runtimeStatus === "thinking") {
       return;
@@ -389,6 +446,13 @@ export default function ButtonInterfacePage() {
         selectedModel,
       );
 
+    const requestId =
+      crypto.randomUUID();
+
+    setActiveRequestId(
+      requestId,
+    );
+
     setRuntimeStatus("thinking");
     setErrorMessage("");
 
@@ -408,6 +472,7 @@ export default function ButtonInterfacePage() {
     const execution =
       await executeModelRequest({
         request: cleanRequest,
+        requestId,
         model: activeModel,
         definitionPath:
           intelligenceConfig.definitionPath,
@@ -433,6 +498,10 @@ export default function ButtonInterfacePage() {
       ),
       ...current,
     ].slice(0, 100));
+
+    setActiveRequestId(
+      null,
+    );
 
     setRuntimeStatus("ready");
   }
@@ -491,6 +560,9 @@ export default function ButtonInterfacePage() {
           }
           onAsk={() => {
             void handleAsk();
+          }}
+          onCancel={() => {
+            void handleCancel();
           }}
         />
 
