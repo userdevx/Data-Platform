@@ -460,6 +460,10 @@ def _execute_image_model(
     width: int,
     height: int,
     seed: int,
+    guidance_scale: float,
+    negative_prompt: str,
+    vae_tiling: bool,
+    attention_slicing: bool,
 ) -> dict[str, Any]:
     return execute_image_generation_model(
         model_name=descriptor.name,
@@ -479,6 +483,10 @@ def _execute_image_model(
         width=width,
         height=height,
         seed=seed,
+        guidance_scale=guidance_scale,
+        negative_prompt=negative_prompt,
+        vae_tiling=vae_tiling,
+        attention_slicing=attention_slicing,
     )
 
 
@@ -497,6 +505,10 @@ def test_base_model(
     width: int = 384,
     height: int = 384,
     seed: int = 17,
+    guidance_scale: float = 7.5,
+    negative_prompt: str = "",
+    vae_tiling: bool = True,
+    attention_slicing: bool = True,
 ) -> dict[str, Any]:
     prompt = _validate_prompt(
         prompt
@@ -534,6 +546,10 @@ def test_base_model(
             width=width,
             height=height,
             seed=seed,
+            guidance_scale=guidance_scale,
+            negative_prompt=negative_prompt,
+            vae_tiling=vae_tiling,
+            attention_slicing=attention_slicing,
         )
 
     raise ModelDevelopmentRuntimeError(

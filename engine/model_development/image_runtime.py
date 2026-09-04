@@ -930,6 +930,10 @@ def execute_image_model(
     width: int,
     height: int,
     seed: int,
+    guidance_scale: float,
+    negative_prompt: str,
+    vae_tiling: bool,
+    attention_slicing: bool,
 ) -> dict[str, Any]:
     width = _validate_dimension(
         "width",
@@ -975,6 +979,50 @@ def execute_image_model(
         raise ValueError(
             "seed must be a "
             "non-negative integer."
+        )
+
+    if (
+        not isinstance(
+            guidance_scale,
+            (int, float),
+        )
+        or isinstance(
+            guidance_scale,
+            bool,
+        )
+        or not (
+            0.0
+            <= float(guidance_scale)
+            <= 20.0
+        )
+    ):
+        raise ValueError(
+            "guidance_scale must be "
+            "between 0.0 and 20.0."
+        )
+
+    if not isinstance(
+        negative_prompt,
+        str,
+    ):
+        raise TypeError(
+            "negative_prompt must be a string."
+        )
+
+    if not isinstance(
+        vae_tiling,
+        bool,
+    ):
+        raise TypeError(
+            "vae_tiling must be boolean."
+        )
+
+    if not isinstance(
+        attention_slicing,
+        bool,
+    ):
+        raise TypeError(
+            "attention_slicing must be boolean."
         )
 
     try:
@@ -1108,16 +1156,69 @@ def execute_image_model(
             device
         )
 
-        attention_slicing = getattr(
+        if attention_slicing:
+            enable_attention = getattr(
+                pipeline,
+                "enable_attention_slicing",
+                None,
+            )
+
+            if not callable(
+                enable_attention
+            ):
+                raise ImageRuntimeError(
+                    "The selected image pipeline "
+                    "does not support attention slicing."
+                )
+
+            enable_attention()
+
+        else:
+            disable_attention = getattr(
+                pipeline,
+                "disable_attention_slicing",
+                None,
+            )
+
+            if callable(
+                disable_attention
+            ):
+                disable_attention()
+
+        vae = getattr(
             pipeline,
-            "enable_attention_slicing",
+            "vae",
             None,
         )
 
-        if callable(
-            attention_slicing
-        ):
-            attention_slicing()
+        if vae_tiling:
+            enable_vae_tiling = getattr(
+                vae,
+                "enable_tiling",
+                None,
+            )
+
+            if not callable(
+                enable_vae_tiling
+            ):
+                raise ImageRuntimeError(
+                    "The selected image model VAE "
+                    "does not support tiling."
+                )
+
+            enable_vae_tiling()
+
+        else:
+            disable_vae_tiling = getattr(
+                vae,
+                "disable_tiling",
+                None,
+            )
+
+            if callable(
+                disable_vae_tiling
+            ):
+                disable_vae_tiling()
 
         progress_configuration = (
             getattr(
@@ -1146,8 +1247,15 @@ def execute_image_model(
         with torch.inference_mode():
             result = pipeline(
                 prompt=prompt,
+                negative_prompt=(
+                    negative_prompt
+                    or None
+                ),
                 num_inference_steps=(
                     inference_steps
+                ),
+                guidance_scale=float(
+                    guidance_scale
                 ),
                 width=width,
                 height=height,
@@ -1230,6 +1338,18 @@ def execute_image_model(
         else ""
     )
 
+    scheduler = getattr(
+        pipeline,
+        "scheduler",
+        None,
+    )
+
+    actual_scheduler = (
+        scheduler.__class__.__name__
+        if scheduler is not None
+        else ""
+    )
+
     return {
         "model_name": model_name,
         "model_id": model_name,
@@ -1274,6 +1394,21 @@ def execute_image_model(
         "width": width,
         "height": height,
         "seed": seed,
+        "guidance_scale": float(
+            guidance_scale
+        ),
+        "negative_prompt": (
+            negative_prompt
+        ),
+        "scheduler": (
+            actual_scheduler
+        ),
+        "vae_tiling": (
+            vae_tiling
+        ),
+        "attention_slicing": (
+            attention_slicing
+        ),
         "duration_ms": (
             duration_ms
         ),

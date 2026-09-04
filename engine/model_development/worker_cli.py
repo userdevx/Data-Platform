@@ -6,6 +6,9 @@ import sys
 from typing import Any
 
 
+from engine.generation.cgroup import (
+    read_memory_peak_bytes,
+)
 from engine.model_development.image_runtime import (
     worker_runtime_identity,
 )
@@ -89,6 +92,29 @@ def build_parser(
     )
 
     execute.add_argument(
+        "--guidance-scale",
+        type=float,
+        default=7.5,
+    )
+
+    execute.add_argument(
+        "--negative-prompt",
+        default="",
+    )
+
+    execute.add_argument(
+        "--vae-tiling",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+
+    execute.add_argument(
+        "--attention-slicing",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+
+    execute.add_argument(
         "--output",
         default=None,
     )
@@ -140,7 +166,28 @@ def main() -> int:
             seed=(
                 arguments.seed
             ),
+            guidance_scale=(
+                arguments.guidance_scale
+            ),
+            negative_prompt=(
+                arguments.negative_prompt
+            ),
+            vae_tiling=(
+                arguments.vae_tiling
+            ),
+            attention_slicing=(
+                arguments.attention_slicing
+            ),
         )
+
+        memory_peak_bytes = (
+            read_memory_peak_bytes()
+        )
+
+        if memory_peak_bytes is not None:
+            result[
+                "memory_peak_bytes"
+            ] = memory_peak_bytes
 
         _print_json(
             {
