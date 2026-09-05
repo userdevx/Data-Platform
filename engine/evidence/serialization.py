@@ -168,8 +168,8 @@ def serialize_entity(
     Serialize one Evidence entity into the normalized
     Data Engine Evidence envelope.
 
-    Semantic identity is stored in sensor_type while
-    data_type remains structured_knowledge.
+    Semantic identity is stored in data_type while
+    category remains structured_knowledge.
     """
 
     entity_class = type(
@@ -236,10 +236,10 @@ def serialize_entity(
                 DEFAULT_ENTITY_SOURCE,
             )
         ),
-        "data_type": (
+        "category": (
             STRUCTURED_KNOWLEDGE_DATA_TYPE
         ),
-        "sensor_type": (
+        "data_type": (
             entity_type
         ),
         "value": value,
@@ -589,7 +589,7 @@ def deserialize_entity(
 
     if (
         record.get(
-            "data_type"
+            "category"
         )
         != STRUCTURED_KNOWLEDGE_DATA_TYPE
     ):
@@ -598,7 +598,7 @@ def deserialize_entity(
         )
 
     entity_type = record.get(
-        "sensor_type"
+        "data_type"
     )
 
     if not isinstance(
@@ -607,7 +607,7 @@ def deserialize_entity(
     ):
         raise ValueError(
             "Evidence record does not contain "
-            "a valid sensor_type."
+            "a valid data_type."
         )
 
     entity_class = (

@@ -48,9 +48,6 @@ class DataEngineEvidenceBinding:
             )
 
             stored = data_record.to_dict()
-            stored["sensor_type"] = normalized[
-                "sensor_type"
-            ]
 
             self.query_service.insert_record(
                 stored
@@ -97,8 +94,8 @@ class DataEngineEvidenceBinding:
         required_fields = (
             "id",
             "source",
+            "category",
             "data_type",
-            "sensor_type",
             "value",
             "unit",
         )
@@ -123,12 +120,12 @@ class DataEngineEvidenceBinding:
             record["source"]
         ).strip()
 
-        data_type = str(
-            record["data_type"]
+        category = str(
+            record["category"]
         ).strip()
 
-        sensor_type = str(
-            record["sensor_type"]
+        data_type = str(
+            record["data_type"]
         ).strip()
 
         unit = str(
@@ -147,14 +144,14 @@ class DataEngineEvidenceBinding:
                 "source cannot be empty."
             )
 
+        if not category:
+            raise ValueError(
+                "category cannot be empty."
+            )
+
         if not data_type:
             raise ValueError(
                 "data_type cannot be empty."
-            )
-
-        if not sensor_type:
-            raise ValueError(
-                "sensor_type cannot be empty."
             )
 
         if not unit:
@@ -183,9 +180,8 @@ class DataEngineEvidenceBinding:
 
         return {
             "source": source,
-            "category": data_type,
+            "category": category,
             "data_type": data_type,
-            "sensor_type": sensor_type,
             "value": value,
             "unit": unit,
         }
@@ -221,14 +217,14 @@ class DataEngineEvidenceBinding:
             ) != wanted_id:
                 continue
 
-            sensor_type = record.get(
-                "sensor_type"
+            data_type = record.get(
+                "data_type"
             )
 
             if not isinstance(
-                sensor_type,
+                data_type,
                 str,
-            ) or not sensor_type.strip():
+            ) or not data_type.strip():
                 continue
 
             return {
@@ -237,11 +233,11 @@ class DataEngineEvidenceBinding:
                     "source",
                     "",
                 ),
-                "data_type": record.get(
-                    "data_type",
+                "category": record.get(
+                    "category",
                     "",
                 ),
-                "sensor_type": sensor_type,
+                "data_type": data_type,
                 "value": value,
                 "unit": record.get(
                     "unit",
@@ -266,12 +262,12 @@ class DataEngineEvidenceBinding:
         ] = []
 
         for record in records:
-            sensor_type = record.get(
-                "sensor_type"
+            data_type = record.get(
+                "data_type"
             )
 
             if entity_type is not None:
-                if sensor_type != entity_type:
+                if data_type != entity_type:
                     continue
 
             value = record.get(
@@ -295,9 +291,9 @@ class DataEngineEvidenceBinding:
                 continue
 
             if not isinstance(
-                sensor_type,
+                data_type,
                 str,
-            ) or not sensor_type.strip():
+            ) or not data_type.strip():
                 continue
 
             results.append(
@@ -307,11 +303,11 @@ class DataEngineEvidenceBinding:
                         "source",
                         "",
                     ),
-                    "data_type": record.get(
-                        "data_type",
+                    "category": record.get(
+                        "category",
                         "",
                     ),
-                    "sensor_type": sensor_type,
+                    "data_type": data_type,
                     "value": value,
                     "unit": record.get(
                         "unit",
