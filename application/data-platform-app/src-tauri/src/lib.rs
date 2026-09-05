@@ -1,3 +1,4 @@
+mod agent_bridge;
 mod developer_terminal;
 mod intelligence_bridge;
 mod model_bridge;
@@ -9,8 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 
 const DATA_ENGINE_MAX_BYTES: u64 = 500 * 1024 * 1024;
 
@@ -69,12 +70,6 @@ struct WorkspaceOutput {
     rows: Vec<HashMap<String, String>>,
 }
 
-#[derive(Serialize)]
-struct AgentTaskResult {
-    success: bool,
-    message: String,
-    path: String,
-}
 
 #[derive(Serialize)]
 struct EngineStatus {
@@ -105,17 +100,17 @@ fn timestamp() -> Result<u64, String> {
         .as_secs())
 }
 
+
+
 fn find_application_root() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Ok(current) = std::env::current_dir() {
-        let mut dir = current;
+    for variable in ["DATA_PLATFORM_ROOT", "APPLICATION_ROOT"] {
+        if let Ok(value) = std::env::var(variable) {
+            let value = value.trim();
 
-        loop {
-            candidates.push(dir.clone());
-
-            if !dir.pop() {
-                break;
+            if !value.is_empty() {
+                candidates.push(PathBuf::from(value));
             }
         }
     }
@@ -124,18 +119,33 @@ fn find_application_root() -> Result<PathBuf, String> {
         candidates.push(PathBuf::from(home).join("Data-Platform"));
     }
 
+    if let Ok(current) = std::env::current_dir() {
+        let mut directory = current;
+
+        loop {
+            candidates.push(directory.clone());
+
+            if !directory.pop() {
+                break;
+            }
+        }
+    }
+
     for candidate in candidates {
-        let worker = candidate
+        if candidate
             .join("engine")
             .join("agents")
-            .join("agent_worker.py");
-
-        if worker.exists() {
+            .join("agent_worker.py")
+            .is_file()
+        {
             return Ok(candidate);
         }
     }
 
-    Err("Could not find Data-Platform runtime. Expected engine/agents/agent_worker.py.".to_string())
+    Err(
+        "Could not find Data-Platform runtime. Set DATA_PLATFORM_ROOT or APPLICATION_ROOT."
+            .to_string(),
+    )
 }
 
 fn data_dir() -> Result<PathBuf, String> {
@@ -162,16 +172,6 @@ fn logs_dir() -> Result<PathBuf, String> {
     let path = find_application_root()?.join("data").join("logs");
     fs::create_dir_all(&path)
         .map_err(|error| format!("Unable to create logs folder: {}", error))?;
-    Ok(path)
-}
-
-fn agent_dir() -> Result<PathBuf, String> {
-    let root = find_application_root()?;
-    let path = root.join("engine").join("agents");
-
-    fs::create_dir_all(&path)
-        .map_err(|error| format!("Unable to create agent folder: {}", error))?;
-
     Ok(path)
 }
 
@@ -1460,109 +1460,7 @@ fn workspace_action(
     }
 }
 
-#[tauri::command]
-fn start_agent_worker() -> Result<AgentTaskResult, String> {
-    let root = find_application_root()?;
-    let agents = agent_dir()?;
 
-    let worker = agents.join("agent_worker.py");
-    let log = agents.join("agent.log");
-
-    if !worker.exists() {
-        return Err(format!(
-            "Agent worker not found at {}",
-            worker.to_string_lossy()
-        ));
-    }
-
-    let log_file =
-        fs::File::create(&log).map_err(|error| format!("Unable to create agent log: {}", error))?;
-
-    let python = root.join("venv").join("bin").join("python");
-    let python_command = if python.exists() {
-        python
-    } else {
-        PathBuf::from("python3")
-    };
-
-    let error_log = log_file
-        .try_clone()
-        .map_err(|error| format!("Unable to clone agent log: {}", error))?;
-
-    Command::new(python_command)
-        .arg("-u")
-        .arg("-m")
-        .arg("engine.agents.agent_worker")
-        .current_dir(&root)
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(error_log))
-        .spawn()
-        .map_err(|error| format!("Unable to start agent worker: {}", error))?;
-
-    Ok(AgentTaskResult {
-        success: true,
-        message: "Agent worker started.".to_string(),
-        path: log.to_string_lossy().to_string(),
-    })
-}
-
-#[tauri::command]
-fn submit_agent_task(input: String) -> Result<AgentTaskResult, String> {
-    let agents = agent_dir()?;
-    let input_file = agents.join("agent_input.json");
-
-    let clean_input = input.trim();
-
-    if clean_input.is_empty() {
-        return Err("Enter a question before asking the agent.".to_string());
-    }
-
-    let payload = json!({
-        "input": clean_input,
-        "status": "new",
-        "timestamp": timestamp()?
-    });
-
-    fs::write(
-        &input_file,
-        serde_json::to_string_pretty(&payload).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| format!("Unable to write agent input: {}", error))?;
-
-    Ok(AgentTaskResult {
-        success: true,
-        message: "Task submitted to agent.".to_string(),
-        path: input_file.to_string_lossy().to_string(),
-    })
-}
-
-#[tauri::command]
-fn read_agent_output() -> Result<String, String> {
-    let agents = agent_dir()?;
-    let output_file = agents.join("agent_output.json");
-
-    if !output_file.exists() {
-        return Err(format!(
-            "Agent output file not found yet: {}",
-            output_file.to_string_lossy()
-        ));
-    }
-
-    fs::read_to_string(&output_file)
-        .map_err(|error| format!("Unable to read agent output: {}", error))
-}
-
-#[tauri::command]
-fn read_agent_log() -> Result<String, String> {
-    let agents = agent_dir()?;
-    let log_file = agents.join("agent.log");
-
-    if !log_file.exists() {
-        return Ok("No agent log found yet.".to_string());
-    }
-
-    fs::read_to_string(&log_file).map_err(|error| format!("Unable to read agent log: {}", error))
-}
 #[tauri::command]
 fn update_application() -> Result<String, String> {
     let root = std::env::var("DATA_PLATFORM_ROOT")
@@ -1660,9 +1558,24 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|_app| {
-            // Intelligence auto-start on app launch
-            let _ = start_agent_worker();
+        .setup(|app| {
+            // Intelligence auto-start on app launch.
+            let _ = agent_bridge::start_agent_worker();
+
+            if let Some(window) =
+                app.get_webview_window("main")
+            {
+                window.on_window_event(|event| {
+                    if matches!(
+                        event,
+                        tauri::WindowEvent::Destroyed
+                    ) {
+                        let _ =
+                            agent_bridge::stop_agent_worker();
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1686,10 +1599,10 @@ pub fn run() {
             create_database,
             workspace_refresh,
             workspace_action,
-            start_agent_worker,
-            submit_agent_task,
-            read_agent_output,
-            read_agent_log,
+            agent_bridge::start_agent_worker,
+            agent_bridge::submit_agent_task,
+            agent_bridge::read_agent_output,
+            agent_bridge::read_agent_log,
             developer_terminal::get_developer_terminal_context,
             developer_terminal::run_developer_terminal_command,
             visual_bridge::get_visual_runtime_status,

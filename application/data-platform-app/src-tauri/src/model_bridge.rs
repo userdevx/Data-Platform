@@ -45,17 +45,33 @@ impl Drop for RequestGuard {
     }
 }
 
+
+
 fn application_root() -> Result<PathBuf, String> {
-    if let Ok(configured_root) = std::env::var("APPLICATION_ROOT") {
-        let path = PathBuf::from(configured_root);
+    for variable in ["DATA_PLATFORM_ROOT", "APPLICATION_ROOT"] {
+        if let Ok(value) = std::env::var(variable) {
+            let value = value.trim();
+
+            if !value.is_empty() {
+                let path = PathBuf::from(value);
+
+                if model_bridge_exists(&path) {
+                    return Ok(path);
+                }
+            }
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let path = PathBuf::from(home).join("Data-Platform");
 
         if model_bridge_exists(&path) {
             return Ok(path);
         }
     }
 
-    if let Ok(current_directory) = std::env::current_dir() {
-        let mut candidate = current_directory;
+    if let Ok(current) = std::env::current_dir() {
+        let mut candidate = current;
 
         loop {
             if model_bridge_exists(&candidate) {
@@ -68,15 +84,10 @@ fn application_root() -> Result<PathBuf, String> {
         }
     }
 
-    if let Ok(home_directory) = std::env::var("HOME") {
-        let candidate = PathBuf::from(home_directory).join("Data-Platform");
-
-        if model_bridge_exists(&candidate) {
-            return Ok(candidate);
-        }
-    }
-
-    Err("The application model bridge could not be found.".to_string())
+    Err(
+        "The application model bridge could not be found. Set DATA_PLATFORM_ROOT or APPLICATION_ROOT."
+            .to_string(),
+    )
 }
 
 fn model_bridge_exists(root: &Path) -> bool {
