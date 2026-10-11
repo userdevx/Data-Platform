@@ -36,6 +36,7 @@ _IMPLEMENTED_RUNTIMES = frozenset(
     {
         RuntimeKind.PODMAN,
         RuntimeKind.INCUS_CONTAINER,
+        RuntimeKind.INCUS_VM,
     }
 )
 

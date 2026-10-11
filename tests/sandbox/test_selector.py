@@ -190,3 +190,68 @@ def test_host_os_falls_back_to_incus_container_when_podman_unavailable(
 
     assert selection.runtime_kind == RuntimeKind.INCUS_CONTAINER
     assert selection.isolation_class == IsolationClass.HOST_OS
+
+
+
+def test_hardware_isolation_selects_incus_vm(
+    monkeypatch,
+) -> None:
+    from pathlib import Path
+
+    from engine.sandbox.models import (
+        IsolationClass,
+        RuntimeCapability,
+        RuntimeKind,
+        SandboxRequest,
+        TrustLevel,
+        WorkloadType,
+    )
+    from engine.sandbox.selector import select_runtime
+
+    capabilities = (
+        RuntimeCapability(
+            runtime_kind=RuntimeKind.FIRECRACKER,
+            isolation_class=IsolationClass.HARDWARE,
+            available=False,
+            executable=None,
+            reason="firecracker unavailable",
+        ),
+        RuntimeCapability(
+            runtime_kind=RuntimeKind.INCUS_VM,
+            isolation_class=IsolationClass.HARDWARE,
+            available=True,
+            executable=Path("/usr/bin/incus"),
+            reason=None,
+        ),
+        RuntimeCapability(
+            runtime_kind=RuntimeKind.QEMU_KVM,
+            isolation_class=IsolationClass.HARDWARE,
+            available=True,
+            executable=Path("/usr/bin/qemu-system-x86_64"),
+            reason=None,
+        ),
+        RuntimeCapability(
+            runtime_kind=RuntimeKind.KATA,
+            isolation_class=IsolationClass.HARDWARE,
+            available=False,
+            executable=None,
+            reason="kata unavailable",
+        ),
+    )
+
+    monkeypatch.setattr(
+        "engine.sandbox.selector.discover_runtimes",
+        lambda: capabilities,
+    )
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.SYSTEM,
+        trust_level=TrustLevel.TRUSTED,
+        command=("true",),
+        requires_vm_boundary=True,
+    )
+
+    selection = select_runtime(request)
+
+    assert selection.runtime_kind == RuntimeKind.INCUS_VM
+    assert selection.isolation_class == IsolationClass.HARDWARE

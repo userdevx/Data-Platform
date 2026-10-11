@@ -121,3 +121,65 @@ def test_manager_can_execute_incus_container_runtime(
     assert result.runtime_kind == RuntimeKind.INCUS_CONTAINER
     assert result.exit_code == 0
     assert result.stdout == "INCUS_MANAGER_OK\n"
+
+
+
+def test_manager_can_execute_incus_vm_runtime(
+    monkeypatch,
+) -> None:
+    from engine.sandbox.manager import SandboxManager
+    from engine.sandbox.models import (
+        IsolationClass,
+        RuntimeKind,
+        SandboxRequest,
+        SandboxResult,
+        SandboxSelection,
+        TrustLevel,
+        WorkloadType,
+    )
+    from engine.sandbox.runtime.base import SandboxRuntime
+
+    class FakeIncusVmRuntime(SandboxRuntime):
+        def execute(
+            self,
+            request: SandboxRequest,
+        ) -> SandboxResult:
+            return SandboxResult(
+                runtime_kind=RuntimeKind.INCUS_VM,
+                isolation_class=IsolationClass.HARDWARE,
+                command=tuple(request.command),
+                exit_code=0,
+                stdout="INCUS_VM_MANAGER_OK\n",
+                stderr="",
+                timed_out=False,
+                duration_seconds=0.01,
+            )
+
+    monkeypatch.setattr(
+        "engine.sandbox.manager.select_runtime",
+        lambda request: SandboxSelection(
+            isolation_class=IsolationClass.HARDWARE,
+            runtime_kind=RuntimeKind.INCUS_VM,
+            reason="test",
+        ),
+    )
+
+    manager = SandboxManager(
+        runtime_factories={
+            RuntimeKind.INCUS_VM: FakeIncusVmRuntime,
+        }
+    )
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.SYSTEM,
+        trust_level=TrustLevel.TRUSTED,
+        command=("true",),
+        requires_vm_boundary=True,
+    )
+
+    result = manager.execute(request)
+
+    assert result.runtime_kind == RuntimeKind.INCUS_VM
+    assert result.isolation_class == IsolationClass.HARDWARE
+    assert result.exit_code == 0
+    assert result.stdout == "INCUS_VM_MANAGER_OK\n"

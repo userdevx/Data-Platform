@@ -11,6 +11,9 @@ from engine.sandbox.runtime.base import SandboxRuntime
 from engine.sandbox.runtime.incus_container import (
     IncusContainerRuntime,
 )
+from engine.sandbox.runtime.incus_vm import (
+    IncusVmRuntime,
+)
 from engine.sandbox.runtime.podman import PodmanRuntime
 from engine.sandbox.selector import select_runtime
 
@@ -33,6 +36,7 @@ class SandboxManager:
             else {
                 RuntimeKind.PODMAN: PodmanRuntime,
                 RuntimeKind.INCUS_CONTAINER: IncusContainerRuntime,
+                RuntimeKind.INCUS_VM: IncusVmRuntime,
             }
         )
 
