@@ -8,6 +8,9 @@ from engine.sandbox.models import (
     SandboxResult,
 )
 from engine.sandbox.runtime.base import SandboxRuntime
+from engine.sandbox.runtime.incus_container import (
+    IncusContainerRuntime,
+)
 from engine.sandbox.runtime.podman import PodmanRuntime
 from engine.sandbox.selector import select_runtime
 
@@ -29,6 +32,7 @@ class SandboxManager:
             if runtime_factories is not None
             else {
                 RuntimeKind.PODMAN: PodmanRuntime,
+                RuntimeKind.INCUS_CONTAINER: IncusContainerRuntime,
             }
         )
 

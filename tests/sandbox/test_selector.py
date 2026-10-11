@@ -140,3 +140,53 @@ def test_hardware_request_rejects_available_but_unimplemented_runtime(
         match="runtime adapter not implemented",
     ):
         select_runtime(request)
+
+
+
+def test_host_os_falls_back_to_incus_container_when_podman_unavailable(
+    monkeypatch,
+) -> None:
+    from pathlib import Path
+
+    from engine.sandbox.models import (
+        IsolationClass,
+        RuntimeCapability,
+        RuntimeKind,
+        SandboxRequest,
+        TrustLevel,
+        WorkloadType,
+    )
+    from engine.sandbox.selector import select_runtime
+
+    capabilities = (
+        RuntimeCapability(
+            runtime_kind=RuntimeKind.PODMAN,
+            isolation_class=IsolationClass.HOST_OS,
+            available=False,
+            executable=None,
+            reason="podman unavailable",
+        ),
+        RuntimeCapability(
+            runtime_kind=RuntimeKind.INCUS_CONTAINER,
+            isolation_class=IsolationClass.HOST_OS,
+            available=True,
+            executable=Path("/usr/bin/incus"),
+            reason=None,
+        ),
+    )
+
+    monkeypatch.setattr(
+        "engine.sandbox.selector.discover_runtimes",
+        lambda: capabilities,
+    )
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.TRUSTED_BUILD,
+        trust_level=TrustLevel.TRUSTED,
+        command=("true",),
+    )
+
+    selection = select_runtime(request)
+
+    assert selection.runtime_kind == RuntimeKind.INCUS_CONTAINER
+    assert selection.isolation_class == IsolationClass.HOST_OS
