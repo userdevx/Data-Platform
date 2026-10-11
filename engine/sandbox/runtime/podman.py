@@ -23,7 +23,7 @@ class PodmanRuntime(SandboxRuntime):
 
     def __init__(
         self,
-        image: str = "docker.io/library/python:3.12-slim",
+        image: str = "docker.io/library/alpine:latest",
     ) -> None:
         self._image = image
 
@@ -47,6 +47,7 @@ class PodmanRuntime(SandboxRuntime):
             str(executable),
             "run",
             "--rm",
+            "--pull=never",
             f"--timeout={request.limits.timeout_seconds}",
             "--read-only",
             "--cap-drop=ALL",

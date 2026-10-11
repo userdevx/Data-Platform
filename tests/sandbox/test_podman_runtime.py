@@ -166,3 +166,27 @@ def test_runtime_enforces_native_timeout() -> None:
     assert "TIMEOUT_STARTED" in result.stdout
     assert "SHOULD_NOT_PRINT" not in result.stdout
     assert result.duration_seconds < 10
+
+
+def test_runtime_does_not_pull_missing_image() -> None:
+    runtime = PodmanRuntime(
+        image="localhost/dataworc-image-that-does-not-exist:test",
+    )
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.TRUSTED_BUILD,
+        trust_level=TrustLevel.TRUSTED,
+        command=("true",),
+        limits=ResourceLimits(
+            cpu_count=0.25,
+            memory_mb=128,
+            timeout_seconds=3,
+            pids=32,
+        ),
+    )
+
+    result = runtime.execute(request)
+
+    assert result.exit_code != 0
+    assert result.timed_out is False
+    assert result.duration_seconds < 3
