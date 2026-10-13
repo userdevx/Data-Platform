@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import socket
@@ -10,6 +9,14 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from engine.sandbox.guest_protocol import (
+    GuestProtocolError,
+    build_execute_request,
+    decode_message,
+    encode_message,
+    parse_execution_result,
+    validate_ready,
+)
 from engine.sandbox.models import (
     IsolationClass,
     RuntimeKind,
@@ -148,6 +155,19 @@ class QemuRuntime(SandboxRuntime):
                 "Direct QEMU host workspace mounting is not "
                 "implemented yet"
             )
+
+        # Reject anything the guest protocol would reject before a VM
+        # is booted, not after.
+        try:
+            build_execute_request(
+                request_id="preflight",
+                command=request.command,
+                environment=request.environment,
+                working_directory=None,
+                pids=request.limits.pids,
+            )
+        except GuestProtocolError as exc:
+            raise ValueError(str(exc)) from exc
 
     def _create_overlay(
         self,
@@ -339,28 +359,16 @@ class QemuRuntime(SandboxRuntime):
                 continue
 
             try:
-                message = json.loads(
-                    raw.decode("utf-8")
-                )
-            except Exception as exc:
-                last_error = (
-                    "invalid guest readiness message: "
-                    f"{type(exc).__name__}: {exc}"
-                )
+                message = decode_message(raw)
+                validate_ready(message)
+            except GuestProtocolError as exc:
+                last_error = str(exc)
                 stream.close()
                 client.close()
                 time.sleep(0.1)
                 continue
 
-            if message.get("type") == "ready":
-                return client, stream
-
-            last_error = (
-                "guest did not return a readiness message"
-            )
-            stream.close()
-            client.close()
-            time.sleep(0.1)
+            return client, stream
 
         raise QemuRuntimeUnavailable(
             "Timed out waiting for DataWorc QEMU guest agent"
@@ -471,26 +479,15 @@ class QemuRuntime(SandboxRuntime):
 
                 request_id = uuid4().hex
 
-                payload = {
-                    "id": request_id,
-                    "command": list(
-                        request.command
-                    ),
-                    "environment": dict(
-                        request.environment
-                    ),
-                    "working_directory": None,
-                    "pids": request.limits.pids,
-                }
+                payload = build_execute_request(
+                    request_id=request_id,
+                    command=request.command,
+                    environment=request.environment,
+                    working_directory=None,
+                    pids=request.limits.pids,
+                )
 
-                encoded = (
-                    json.dumps(
-                        payload,
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    )
-                    + "\n"
-                ).encode("utf-8")
+                encoded = encode_message(payload)
 
                 client.settimeout(
                     request.limits.timeout_seconds
@@ -567,10 +564,12 @@ class QemuRuntime(SandboxRuntime):
                     )
 
                 try:
-                    result = json.loads(
-                        raw.decode("utf-8")
+                    payload = decode_message(raw)
+                    result = parse_execution_result(
+                        payload,
+                        expected_request_id=request_id,
                     )
-                except Exception as exc:
+                except GuestProtocolError as exc:
                     return SandboxResult(
                         runtime_kind=self.runtime_kind,
                         isolation_class=(
@@ -583,31 +582,7 @@ class QemuRuntime(SandboxRuntime):
                         stdout="",
                         stderr=(
                             "Invalid QEMU guest result: "
-                            f"{type(exc).__name__}: {exc}"
-                        ),
-                        timed_out=False,
-                        duration_seconds=duration,
-                    )
-
-                if (
-                    result.get("type")
-                    != "result"
-                    or result.get("id")
-                    != request_id
-                ):
-                    return SandboxResult(
-                        runtime_kind=self.runtime_kind,
-                        isolation_class=(
-                            IsolationClass.HARDWARE
-                        ),
-                        command=tuple(
-                            request.command
-                        ),
-                        exit_code=125,
-                        stdout="",
-                        stderr=(
-                            "QEMU guest returned a mismatched "
-                            "execution result"
+                            f"{exc}"
                         ),
                         timed_out=False,
                         duration_seconds=duration,
@@ -621,24 +596,9 @@ class QemuRuntime(SandboxRuntime):
                     command=tuple(
                         request.command
                     ),
-                    exit_code=int(
-                        result.get(
-                            "exit_code",
-                            125,
-                        )
-                    ),
-                    stdout=str(
-                        result.get(
-                            "stdout",
-                            "",
-                        )
-                    ),
-                    stderr=str(
-                        result.get(
-                            "stderr",
-                            "",
-                        )
-                    ),
+                    exit_code=result.exit_code,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
                     timed_out=False,
                     duration_seconds=duration,
                 )
