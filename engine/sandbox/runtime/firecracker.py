@@ -655,8 +655,17 @@ class FirecrackerRuntime(SandboxRuntime):
         client: socket.socket | None = None
 
         try:
+            owner_pid = os.getpid()
+            owner_start = process_start_time(owner_pid)
+
+            if owner_start is None:
+                raise FirecrackerRuntimeUnavailable(
+                    "unable to determine runtime owner "
+                    f"start time for pid {owner_pid}"
+                )
+
             (run_dir / OWNER_FILE).write_text(
-                f"{os.getpid()} {process_start_time(os.getpid())}\n",
+                f"{owner_pid} {owner_start}\n",
                 encoding="utf-8",
             )
 
