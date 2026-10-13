@@ -15,7 +15,10 @@ class SandboxRuntimeUnavailable(RuntimeError):
     pass
 
 
-_RUNTIME_PRIORITY: dict[IsolationClass, tuple[RuntimeKind, ...]] = {
+_RUNTIME_PRIORITY: dict[
+    IsolationClass,
+    tuple[RuntimeKind, ...],
+] = {
     IsolationClass.HOST_OS: (
         RuntimeKind.PODMAN,
         RuntimeKind.INCUS_CONTAINER,
@@ -36,6 +39,7 @@ _IMPLEMENTED_RUNTIMES = frozenset(
     {
         RuntimeKind.PODMAN,
         RuntimeKind.INCUS_CONTAINER,
+        RuntimeKind.GVISOR,
         RuntimeKind.INCUS_VM,
     }
 )
