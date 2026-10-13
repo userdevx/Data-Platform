@@ -21,6 +21,13 @@ Trust boundaries, per Task 09.2 / 09.4:
 The guest is treated as untrusted: every read from the vsock has a
 deadline and a size cap.
 
+Host-crash safety (Task 09.7): Firecracker runs in its own session, so it
+would outlive a host process killed by SIGTERM/SIGKILL. It is therefore
+launched through setpriv --pdeathsig SIGKILL (the kernel kills the VM when
+the launching thread dies), and every run directory records its owner.
+Directories whose owner is dead are swept, with any VM still using them,
+before the next execution.
+
 Not wired into the selector or manager here (separate task boundary).
 """
 
@@ -66,6 +73,9 @@ _SANDBOX_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = _SANDBOX_ROOT.parents[1]
 DEFAULT_PIN_FILE = _SANDBOX_ROOT / "images" / "firecracker" / "pinned.json"
 DEFAULT_RUN_ROOT = Path("~/.cache/dataworc/sandbox/firecracker/runs")
+SETPRIV = Path("/usr/bin/setpriv")
+RUN_DIR_PREFIX = "dataworc-fc-"
+OWNER_FILE = "owner"
 
 # Must stay identical to GUEST_FILES in
 # scripts/sandbox-tasks/firecracker_guest_image.py; a real test enforces
@@ -173,6 +183,54 @@ def guest_image_dir(store: Path, arch: str, digest: str) -> Path:
 def _host_arch() -> str:
     machine = platform.machine()
     return {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+
+
+def process_start_time(pid: int) -> str | None:
+    """Kernel start time of pid (clock ticks since boot), or None if gone.
+
+    (pid, start time) identifies a process; a reused pid has a new time.
+    """
+
+    try:
+        stat_line = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return None
+
+    fields = stat_line.rsplit(")", 1)[1].split()
+    return fields[19] if len(fields) > 19 else None
+
+
+def _owner_alive(run_dir: Path) -> bool | None:
+    """True/False for a recorded owner, None if no owner was recorded."""
+
+    try:
+        pid_text, start = (run_dir / OWNER_FILE).read_text().split()
+        pid = int(pid_text)
+    except (OSError, ValueError):
+        return None
+
+    return process_start_time(pid) == start
+
+
+def _vm_processes_using(run_dir: Path) -> list[int]:
+    """Pids whose argv names this run directory's VM config."""
+
+    config = str(run_dir / "vm.json").encode()
+    found = []
+
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+
+        try:
+            argv = (proc / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+
+        if b"--config-file" in argv and config in argv:
+            found.append(int(proc.name))
+
+    return found
 
 
 class FirecrackerRuntime(SandboxRuntime):
@@ -298,6 +356,11 @@ class FirecrackerRuntime(SandboxRuntime):
                 raise FirecrackerRuntimeUnavailable(
                     f"pin is for {arch}, host is {_host_arch()}"
                 )
+
+            if not SETPRIV.is_file():
+                raise FirecrackerRuntimeUnavailable(f"{SETPRIV} is required")
+
+            self._require_root_owned(SETPRIV)
 
             firecracker = Path(pin["firecracker"]["path"])
             self._require_root_owned(firecracker)
@@ -477,6 +540,52 @@ class FirecrackerRuntime(SandboxRuntime):
             f"guest agent not ready within {self._boot_timeout_seconds}s: {last_error}"
         )
 
+    # ------------------------------------------------------- crash recovery
+
+    def sweep_stale_runs(self) -> list[Path]:
+        """Remove run directories whose owning process is dead.
+
+        Kills any VM process still using such a directory first. Directories
+        with a live owner, or with no owner recorded yet, are left alone.
+        """
+
+        if not self._run_root.is_dir():
+            return []
+
+        removed = []
+
+        for run_dir in sorted(self._run_root.glob(f"{RUN_DIR_PREFIX}*")):
+            if run_dir.is_symlink() or not run_dir.is_dir():
+                continue
+
+            if _owner_alive(run_dir) is not False:
+                continue
+
+            for pid in _vm_processes_using(run_dir):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            deadline = time.monotonic() + 5
+
+            while _vm_processes_using(run_dir) and time.monotonic() < deadline:
+                time.sleep(0.05)
+
+            if _vm_processes_using(run_dir):
+                raise FirecrackerCleanupError(
+                    f"stale VM for {run_dir} survived SIGKILL"
+                )
+
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+            if run_dir.exists():
+                raise FirecrackerCleanupError(f"stale run directory not removed: {run_dir}")
+
+            removed.append(run_dir)
+
+        return removed
+
     # ------------------------------------------------------------- teardown
 
     @staticmethod
@@ -534,7 +643,8 @@ class FirecrackerRuntime(SandboxRuntime):
         artifacts = self.resolve_artifacts()
 
         self._run_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        run_dir = Path(tempfile.mkdtemp(prefix="dataworc-fc-", dir=self._run_root))
+        self.sweep_stale_runs()
+        run_dir = Path(tempfile.mkdtemp(prefix=RUN_DIR_PREFIX, dir=self._run_root))
         vm_id = f"dataworc-fc-{uuid4().hex[:12]}"
         rootfs_copy = run_dir / "rootfs.ext4"
         vsock_path = run_dir / "vsock.sock"
@@ -545,6 +655,11 @@ class FirecrackerRuntime(SandboxRuntime):
         client: socket.socket | None = None
 
         try:
+            (run_dir / OWNER_FILE).write_text(
+                f"{os.getpid()} {process_start_time(os.getpid())}\n",
+                encoding="utf-8",
+            )
+
             if len(str(vsock_path)) > _UNIX_PATH_MAX:
                 raise FirecrackerRuntimeUnavailable(
                     f"vsock socket path too long for AF_UNIX: {vsock_path}"
@@ -575,8 +690,14 @@ class FirecrackerRuntime(SandboxRuntime):
             config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
             with serial_log.open("wb") as log:
+                # setpriv sets PR_SET_PDEATHSIG then execs firecracker in
+                # place (same pid, argv and process group).
                 process = subprocess.Popen(
                     [
+                        str(SETPRIV),
+                        "--pdeathsig",
+                        "SIGKILL",
+                        "--",
                         str(artifacts.firecracker),
                         "--id",
                         vm_id,
