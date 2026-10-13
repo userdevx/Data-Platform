@@ -30,14 +30,30 @@ One JSON object per line.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import re
+import signal
 import subprocess
+import threading
 from typing import Any, BinaryIO, Callable
 
 
 PROTOCOL_VERSION = 1
 PROTOCOL_FAILURE_EXIT_CODE = 125
 SYSTEMD_RUN = "/usr/bin/systemd-run"
+SYSTEMCTL = "/usr/bin/systemctl"
+
+# Workloads start from this fixed environment plus the request's own
+# variables. The agent's environment is never inherited.
+BASE_ENVIRONMENT = {
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "HOME": "/root",
+    "LANG": "C.UTF-8",
+}
+
+_OUTPUT_DRAIN_SECONDS = 10
 
 
 def encode_message(payload: dict[str, Any]) -> bytes:
@@ -171,14 +187,28 @@ def validate_request(
     return None
 
 
+def scope_unit_name(request_id: str) -> str:
+    """Deterministic, systemd-valid scope name for one request."""
+
+    safe = re.sub(r"[^A-Za-z0-9_-]", "", request_id)[:32] or "request"
+    digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()[:12]
+    return f"dataworc-run-{safe}-{digest}"
+
+
 def build_command(
     request: dict[str, Any],
     use_systemd: bool = True,
 ) -> list[str]:
     """Build workload argv.
 
-    In guests, systemd-run places each workload in a transient unit and
-    applies TasksMax to that unit.
+    In guests the workload runs as ``systemd-run --scope``: systemd-run
+    reaches PID 1 over its private socket (no D-Bus needed), creates a
+    transient scope with TasksMax, then execs the workload in place. The
+    agent therefore owns stdin/stdout/stderr and the exit status directly.
+
+    Not a transient service: --wait/--pipe need a D-Bus system bus, which
+    minimal guest images (Firecracker CI rootfs) do not have. systemd 255
+    also rejects --wait and --pipe together with --scope.
 
     Host-side tests may disable systemd and execute directly.
     """
@@ -186,41 +216,70 @@ def build_command(
     if not use_systemd:
         return list(request["command"])
 
-    argv = [
+    return [
         SYSTEMD_RUN,
         "--quiet",
-        "--wait",
-        "--collect",
-        "--pipe",
-        "--service-type=exec",
-        (
-            "--property=TasksMax="
-            f"{request['pids']}"
-        ),
+        "--scope",
+        f"--unit={scope_unit_name(request['id'])}",
+        f"--property=TasksMax={request['pids']}",
+        "--",
+        *request["command"],
     ]
 
-    working_directory = request.get(
-        "working_directory"
-    )
 
-    if working_directory is not None:
-        argv.append(
-            "--working-directory="
-            f"{working_directory}"
-        )
+def workload_environment(request: dict[str, Any]) -> dict[str, str]:
+    environment = dict(BASE_ENVIRONMENT)
+    environment.update(request.get("environment", {}))
+    return environment
 
-    for key, value in request.get(
-        "environment",
-        {},
-    ).items():
-        argv.append(
-            f"--setenv={key}={value}"
-        )
 
-    argv.append("--")
-    argv.extend(request["command"])
+def _exit_code(returncode: int) -> int:
+    return 128 - returncode if returncode < 0 else returncode
 
-    return argv
+
+def _drain(stream: BinaryIO, sink: list[bytes]) -> None:
+    try:
+        for chunk in iter(lambda: stream.read(65536), b""):
+            sink.append(chunk)
+    except (OSError, ValueError):
+        pass
+
+
+def _stop_workload(
+    process: subprocess.Popen,
+    request: dict[str, Any],
+    use_systemd: bool,
+) -> None:
+    """Kill anything the workload left running after its main process.
+
+    Stray background children would otherwise keep running and hold the
+    output pipes open, hanging the agent.
+    """
+
+    if use_systemd:
+        # SIGKILL every process still in the request's scope cgroup,
+        # including ones that left the process group (setsid). An empty
+        # scope is garbage-collected by systemd; "not loaded" is fine.
+        try:
+            subprocess.run(
+                [
+                    SYSTEMCTL,
+                    "kill",
+                    "--signal=SIGKILL",
+                    f"{scope_unit_name(request['id'])}.scope",
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def execute_request(
@@ -236,55 +295,51 @@ def execute_request(
             else None
         )
 
-        return failure(
-            request_id,
-            error,
-        )
+        return failure(request_id, error)
 
     request_id = request["id"]
 
     try:
-        completed = subprocess.run(
-            build_command(
-                request,
-                use_systemd,
-            ),
+        process = subprocess.Popen(
+            build_command(request, use_systemd),
             stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-            env=(
-                None
-                if use_systemd
-                else dict(
-                    request.get(
-                        "environment",
-                        {},
-                    )
-                )
-            ),
-            cwd=(
-                None
-                if use_systemd
-                else request.get(
-                    "working_directory"
-                )
-            ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=workload_environment(request),
+            cwd=request.get("working_directory"),
+            start_new_session=True,
         )
-
     except Exception as exc:
-        return failure(
-            request_id,
-            f"{type(exc).__name__}: {exc}",
-        )
+        return failure(request_id, f"{type(exc).__name__}: {exc}")
+
+    stdout: list[bytes] = []
+    stderr: list[bytes] = []
+    readers = [
+        threading.Thread(target=_drain, args=(process.stdout, stdout), daemon=True),
+        threading.Thread(target=_drain, args=(process.stderr, stderr), daemon=True),
+    ]
+
+    for reader in readers:
+        reader.start()
+
+    returncode = process.wait()
+    _stop_workload(process, request, use_systemd)
+
+    for reader in readers:
+        reader.join(timeout=_OUTPUT_DRAIN_SECONDS)
+
+    for pipe in (process.stdout, process.stderr):
+        try:
+            pipe.close()
+        except OSError:
+            pass
 
     return {
         "type": "result",
         "id": request_id,
-        "exit_code": completed.returncode,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
+        "exit_code": _exit_code(returncode),
+        "stdout": b"".join(stdout).decode("utf-8", errors="replace"),
+        "stderr": b"".join(stderr).decode("utf-8", errors="replace"),
     }
 
 

@@ -58,6 +58,7 @@ WANTS_LINK = (
 REQUIRED_EXECUTABLES = (
     "/usr/bin/python3",
     "/usr/bin/systemd-run",
+    "/usr/bin/systemctl",
     "/sbin/init",
 )
 

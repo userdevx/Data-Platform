@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
+import time
 import os
 import shutil
 import socket
@@ -303,50 +305,134 @@ def test_real_execution_environment_and_cwd(
     )
 
 
-def test_systemd_command_carries_controls() -> None:
-    argv = guest.build_command(
-        _request(
-            environment={
-                "A": "1",
-            },
-            working_directory="/work",
-            pids=32,
-        )
+def test_systemd_command_uses_scope_without_dbus() -> None:
+    request = _request(
+        environment={"A": "1"},
+        working_directory="/work",
+        pids=32,
     )
+    argv = guest.build_command(request)
 
-    assert argv[0] == (
-        "/usr/bin/systemd-run"
-    )
+    assert argv[:3] == ["/usr/bin/systemd-run", "--quiet", "--scope"]
+    assert f"--unit={guest.scope_unit_name('req-1')}" in argv
+    assert "--property=TasksMax=32" in argv
 
-    assert (
-        "--property=TasksMax=32"
-        in argv
-    )
+    # --wait/--pipe need a D-Bus system bus; minimal guests have none.
+    for needs_dbus in ("--wait", "--pipe"):
+        assert needs_dbus not in argv
 
-    assert (
-        "--setenv=A=1"
-        in argv
-    )
+    # Environment and cwd are applied to the process, not via systemd.
+    assert not any(arg.startswith(("--setenv", "--working-directory")) for arg in argv)
 
-    assert (
-        "--working-directory=/work"
-        in argv
-    )
+    assert argv[argv.index("--") + 1:] == [
+        "sh",
+        "-c",
+        "echo out; echo err >&2; exit 3",
+    ]
 
-    assert (
-        argv[
-            argv.index("--") + 1:
-        ]
-        == [
-            "sh",
-            "-c",
-            (
-                "echo out; "
-                "echo err >&2; "
-                "exit 3"
+
+@pytest.mark.parametrize(
+    "request_id",
+    ["req-1", "a/b c", "x" * 200, "../../etc", "\u00e9t\u00e9"],
+)
+def test_scope_unit_name_is_valid_and_unique(request_id: str) -> None:
+    name = guest.scope_unit_name(request_id)
+
+    assert re.fullmatch(r"dataworc-run-[A-Za-z0-9_-]{1,32}-[0-9a-f]{12}", name)
+    assert name != guest.scope_unit_name(request_id + "x")
+
+
+def test_workload_environment_is_base_plus_request_only() -> None:
+    marker = "DATAWORC_AGENT_ONLY_VARIABLE"
+    os.environ[marker] = "must-not-leak"
+
+    try:
+        result = guest.execute_request(
+            _request(
+                command=[
+                    sys.executable,
+                    "-c",
+                    "import json, os; print(json.dumps(sorted(os.environ)))",
+                ],
+                environment={"REQUEST_VAR": "1"},
             ),
-        ]
+            use_systemd=False,
+        )
+    finally:
+        del os.environ[marker]
+
+    assert result["exit_code"] == 0, result["stderr"]
+    keys = set(json.loads(result["stdout"]))
+
+    assert marker not in keys
+    assert {"PATH", "HOME", "LANG", "REQUEST_VAR"} <= keys
+    assert keys <= {"PATH", "HOME", "LANG", "REQUEST_VAR", "LC_CTYPE"}
+
+
+def test_background_children_do_not_hang_or_survive(tmp_path: Path) -> None:
+    pid_file = tmp_path / "child.pid"
+    started = time.monotonic()
+
+    result = guest.execute_request(
+        _request(command=["sh", "-c", f"sleep 60 & echo $! > {pid_file}; echo done"]),
+        use_systemd=False,
     )
+
+    assert result["exit_code"] == 0, result["stderr"]
+    assert result["stdout"] == "done\n"
+    assert time.monotonic() - started < 15
+
+    child = int(pid_file.read_text())
+    deadline = time.monotonic() + 5
+
+    stat_path = Path(f"/proc/{child}/stat")
+
+    while time.monotonic() < deadline:
+        try:
+            state = (
+                stat_path.read_text()
+                .rsplit(")", 1)[1]
+                .split()[0]
+            )
+        except FileNotFoundError:
+            break
+
+        if state == "Z":
+            break
+
+        time.sleep(0.05)
+
+    try:
+        final_state = (
+            stat_path.read_text()
+            .rsplit(")", 1)[1]
+            .split()[0]
+        )
+    except FileNotFoundError:
+        alive = False
+    else:
+        alive = final_state != "Z"
+
+    assert not alive, "background child outlived the request"
+
+
+def test_signal_death_maps_to_shell_convention() -> None:
+    result = guest.execute_request(
+        _request(command=["sh", "-c", "kill -TERM $$"]),
+        use_systemd=False,
+    )
+
+    assert result["exit_code"] == 128 + 15
+
+
+def test_missing_working_directory_is_a_protocol_failure() -> None:
+    result = guest.execute_request(
+        _request(command=["true"], working_directory="/nonexistent/dataworc"),
+        use_systemd=False,
+    )
+
+    assert result["exit_code"] == guest.PROTOCOL_FAILURE_EXIT_CODE
+    assert "FileNotFoundError" in result["stderr"]
 
 
 def test_real_stream_session_over_socket() -> None:
@@ -603,6 +689,7 @@ def test_real_build_installs_validated_agent(
         == {
             "/usr/bin/python3",
             "/usr/bin/systemd-run",
+            "/usr/bin/systemctl",
             "/sbin/init",
         }
     )
