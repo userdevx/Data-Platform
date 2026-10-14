@@ -253,11 +253,9 @@ def _image_copy(artifacts, tmp_path: Path, *, copy_rootfs: bool) -> Path:
     if copy_rootfs:
         shutil.copyfile(artifacts.rootfs, rootfs)
     else:
-        try:
-            os.link(artifacts.rootfs, rootfs)
-        except OSError:
-            shutil.copyfile(artifacts.rootfs, rootfs)
-            os.chmod(rootfs, 0o444)
+        # Pre-boot refusal tests never consume rootfs bytes.
+        rootfs.write_bytes(b"placeholder rootfs; refused before boot\n")
+        os.chmod(rootfs, 0o444)
 
     return target
 
@@ -299,7 +297,7 @@ def test_stale_manifest_is_refused(artifacts, tmp_path: Path, run_root: Path) ->
 
 
 def test_writable_rootfs_is_refused(artifacts, tmp_path: Path, run_root: Path) -> None:
-    image = _image_copy(artifacts, tmp_path, copy_rootfs=True)
+    image = _image_copy(artifacts, tmp_path, copy_rootfs=False)
     os.chmod(image / artifacts.rootfs.name, 0o644)
 
     runtime = FirecrackerRuntime(run_root=run_root, guest_image_override=image)
