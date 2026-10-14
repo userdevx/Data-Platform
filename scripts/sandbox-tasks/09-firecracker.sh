@@ -291,7 +291,7 @@ run_pytest() {
     # Reject skipped, failed, xfailed, xpassed, errors, warnings,
     # "no tests ran", or combined summaries containing commas.
 
-    if [[ ! "$summary" =~ ^[0-9]+\ passed\ in\ [0-9.]+s$ ]]; then
+    if [[ ! "$summary" =~ ^[0-9]+[[:space:]]+passed[[:space:]]+in[[:space:]]+[0-9.]+s([[:space:]]+\([0-9:]+\))?$ ]]; then
         fail \
             "Firecracker test chain summary not clean: '$summary' " \
             "(log: $log)"
