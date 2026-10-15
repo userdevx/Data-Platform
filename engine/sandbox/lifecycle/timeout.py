@@ -34,6 +34,11 @@ class ProcessOutcome:
     duration_seconds: float
     stdout_truncated: bool
     stderr_truncated: bool
+    user_cpu_seconds: float
+    system_cpu_seconds: float
+    max_rss_kb: int
+    voluntary_context_switches: int
+    involuntary_context_switches: int
 
 
 class _BoundedReader(threading.Thread):
@@ -294,16 +299,18 @@ def run_process(
     timed_out = False
     cancelled = False
     status: int | None = None
+    usage = None
 
     try:
         while True:
-            reaped_pid, raw_status, _ = os.wait4(
+            reaped_pid, raw_status, observed_usage = os.wait4(
                 process.pid,
                 os.WNOHANG,
             )
 
             if reaped_pid == process.pid:
                 status = raw_status
+                usage = observed_usage
                 break
 
             if (
@@ -325,7 +332,7 @@ def run_process(
                 grace_seconds=grace_seconds,
             )
 
-            _, status, _ = os.wait4(
+            _, status, usage = os.wait4(
                 process.pid,
                 0,
             )
@@ -344,7 +351,7 @@ def run_process(
             )
 
             try:
-                _, status, _ = os.wait4(
+                _, status, usage = os.wait4(
                     process.pid,
                     0,
                 )
@@ -389,4 +396,29 @@ def run_process(
         ),
         stdout_truncated=stdout_reader.truncated,
         stderr_truncated=stderr_reader.truncated,
+        user_cpu_seconds=(
+            float(usage.ru_utime)
+            if usage is not None
+            else 0.0
+        ),
+        system_cpu_seconds=(
+            float(usage.ru_stime)
+            if usage is not None
+            else 0.0
+        ),
+        max_rss_kb=(
+            int(usage.ru_maxrss)
+            if usage is not None
+            else 0
+        ),
+        voluntary_context_switches=(
+            int(usage.ru_nvcsw)
+            if usage is not None
+            else 0
+        ),
+        involuntary_context_switches=(
+            int(usage.ru_nivcsw)
+            if usage is not None
+            else 0
+        ),
     )
