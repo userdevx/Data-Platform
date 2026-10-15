@@ -301,3 +301,227 @@ INNER
     print(
         "REAL_KERNEL_RESOURCE_USAGE_EVIDENCE_OK"
     )
+
+
+
+def test_real_filesystem_evidence_diff(
+    tmp_path: Path,
+) -> None:
+    from engine.sandbox.evidence import (
+        diff_filesystems,
+        snapshot_filesystem,
+    )
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    unchanged = workspace / "unchanged.txt"
+    unchanged.write_text(
+        "same\n",
+        encoding="utf-8",
+    )
+
+    modified = workspace / "modified.txt"
+    modified.write_text(
+        "before\n",
+        encoding="utf-8",
+    )
+
+    removed = workspace / "removed.txt"
+    removed.write_text(
+        "removed\n",
+        encoding="utf-8",
+    )
+
+    link = workspace / "link"
+    link.symlink_to(
+        "unchanged.txt"
+    )
+
+    before = snapshot_filesystem(
+        workspace
+    )
+
+    modified.write_text(
+        "after\n",
+        encoding="utf-8",
+    )
+
+    removed.unlink()
+
+    added = workspace / "added.txt"
+    added.write_text(
+        "added\n",
+        encoding="utf-8",
+    )
+
+    link.unlink()
+
+    link.symlink_to(
+        "modified.txt"
+    )
+
+    after = snapshot_filesystem(
+        workspace
+    )
+
+    changes = diff_filesystems(
+        before,
+        after,
+    )
+
+    observed = {
+        (
+            change.path,
+            change.change_type,
+        )
+        for change in changes
+    }
+
+    assert (
+        "modified.txt",
+        "modified",
+    ) in observed
+
+    assert (
+        "removed.txt",
+        "removed",
+    ) in observed
+
+    assert (
+        "added.txt",
+        "added",
+    ) in observed
+
+    assert (
+        "link",
+        "symlink_target_changed",
+    ) in observed
+
+    assert not any(
+        change.path == "unchanged.txt"
+        for change in changes
+    )
+
+    print(
+        "REAL_FILESYSTEM_EVIDENCE_DIFF_OK"
+    )
+
+
+
+def test_real_execution_evidence_models(
+    tmp_path: Path,
+) -> None:
+    from engine.sandbox.evidence import (
+        process_outcome_evidence,
+        request_evidence,
+        result_evidence,
+    )
+
+    from engine.sandbox.lifecycle.timeout import (
+        run_process,
+    )
+
+    from engine.sandbox.models import (
+        IsolationClass,
+        ResourceLimits,
+        RuntimeKind,
+        SandboxRequest,
+        SandboxResult,
+        TrustLevel,
+        WorkloadType,
+    )
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.TEST,
+        trust_level=TrustLevel.TRUSTED,
+        command=(
+            "/bin/sh",
+            "-c",
+            "printf 'EVIDENCE_OK\\n'",
+        ),
+        working_directory=tmp_path,
+        network_enabled=False,
+        writable_workspace=True,
+        environment={
+            "SECRET_TOKEN": "must-not-be-recorded",
+            "SAFE_NAME": "value",
+        },
+        limits=ResourceLimits(
+            cpu_count=1.0,
+            memory_mb=256,
+            timeout_seconds=5,
+            pids=16,
+        ),
+    )
+
+    request_record = request_evidence(
+        request
+    )
+
+    assert (
+        request_record.environment_keys
+        == (
+            "SAFE_NAME",
+            "SECRET_TOKEN",
+        )
+    )
+
+    assert (
+        "must-not-be-recorded"
+        not in str(
+            request_record.to_dict()
+        )
+    )
+
+    outcome = run_process(
+        request.command,
+        timeout_seconds=5,
+        cwd=tmp_path,
+    )
+
+    outcome_record = (
+        process_outcome_evidence(
+            outcome
+        )
+    )
+
+    assert outcome_record.exit_code == 0
+
+    assert (
+        outcome_record.stdout
+        == "EVIDENCE_OK\n"
+    )
+
+    result = SandboxResult(
+        runtime_kind=RuntimeKind.PODMAN,
+        isolation_class=IsolationClass.HOST_OS,
+        command=tuple(
+            request.command
+        ),
+        exit_code=outcome.exit_code,
+        stdout=outcome.stdout,
+        stderr=outcome.stderr,
+        timed_out=outcome.timed_out,
+        duration_seconds=(
+            outcome.duration_seconds
+        ),
+    )
+
+    result_record = result_evidence(
+        result
+    )
+
+    assert (
+        result_record.runtime_kind
+        == "podman"
+    )
+
+    assert (
+        result_record.isolation_class
+        == "host_os"
+    )
+
+    print(
+        "REAL_EXECUTION_EVIDENCE_MODELS_OK"
+    )

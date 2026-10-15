@@ -394,7 +394,7 @@ def test_background_children_do_not_hang_or_survive(tmp_path: Path) -> None:
                 .rsplit(")", 1)[1]
                 .split()[0]
             )
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             break
 
         if state == "Z":
