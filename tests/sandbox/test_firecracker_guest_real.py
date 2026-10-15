@@ -369,6 +369,35 @@ def test_workload_environment_is_base_plus_request_only() -> None:
     assert keys <= {"PATH", "HOME", "LANG", "REQUEST_VAR", "LC_CTYPE"}
 
 
+
+def _child_diagnostics(pid: int) -> str:
+    """Why a child is still present: escaped the kill, or dying slowly.
+
+    State D with SIGKILL pending (ShdPnd/SigPnd bit 9) means killed but
+    blocked in uninterruptible I/O; a different pgid/sid means it left the
+    process group before the kill.
+    """
+
+    proc = Path(f"/proc/{pid}")
+    keep = ("State", "PPid", "NSpgid", "NSsid", "SigPnd", "ShdPnd", "SigBlk", "SigIgn")
+    parts = [f"pid={pid}"]
+
+    try:
+        status = (proc / "status").read_text()
+        parts += [line.replace("\t", " ") for line in status.splitlines() if line.split(":")[0] in keep]
+    except OSError as exc:
+        parts.append(f"status=<{type(exc).__name__}>")
+
+    for name in ("wchan", "cgroup", "cmdline"):
+        try:
+            value = (proc / name).read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+        except OSError as exc:
+            value = f"<{type(exc).__name__}>"
+        parts.append(f"{name}={value}")
+
+    return "; ".join(parts)
+
+
 def test_background_children_do_not_hang_or_survive(tmp_path: Path) -> None:
     pid_file = tmp_path / "child.pid"
     started = time.monotonic()
@@ -413,7 +442,10 @@ def test_background_children_do_not_hang_or_survive(tmp_path: Path) -> None:
     else:
         alive = final_state != "Z"
 
-    assert not alive, "background child outlived the request"
+    assert not alive, (
+        "background child outlived the request: "
+        + _child_diagnostics(child)
+    )
 
 
 def test_signal_death_maps_to_shell_convention() -> None:
