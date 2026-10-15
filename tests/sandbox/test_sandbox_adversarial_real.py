@@ -60,7 +60,11 @@ def test_modified_artifact_fails_closed(tmp_path: Path) -> None:
         registry.verify_artifact("image")
 
 
-def test_evidence_tampering_fails_closed(tmp_path: Path) -> None:
+def test_evidence_tampering_fails_closed(
+    tmp_path: Path,
+) -> None:
+    import json
+
     path = tmp_path / "evidence.jsonl"
 
     recorder = EvidenceRecorder(path)
@@ -71,14 +75,38 @@ def test_evidence_tampering_fails_closed(tmp_path: Path) -> None:
         data={"ok": True},
     )
 
-    raw = path.read_text()
+    lines = path.read_text(
+        encoding="utf-8",
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    record = json.loads(
+        lines[0]
+    )
+
+    assert record["data"]["ok"] is True
+
+    record["data"]["ok"] = False
+
     path.write_text(
-        raw.replace('"ok": true', '"ok": false'),
+        json.dumps(
+            record,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
         encoding="utf-8",
     )
 
-    with pytest.raises(EvidenceIntegrityError):
+    with pytest.raises(
+        EvidenceIntegrityError
+    ):
         recorder.verify()
+
+    print(
+        "ADVERSARIAL_EVIDENCE_TAMPER_FAIL_CLOSED_OK"
+    )
 
 
 def test_illegal_lifecycle_transition_fails_closed() -> None:

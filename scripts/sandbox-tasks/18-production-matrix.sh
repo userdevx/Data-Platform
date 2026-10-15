@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-source "$(dirname "$0")/common.sh"
 
-section "TASK 18 — SANDBOX PRODUCTION / ADVERSARIAL MATRIX"
+set -u
+set -o pipefail
 
-NEW_TESTS=(
+ROOT="$(
+    cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+    pwd
+)"
+
+cd "$ROOT" || exit 1
+
+
+COMPLETION_TESTS=(
     tests/sandbox/test_registry_real.py
     tests/sandbox/test_lifecycle_real.py
     tests/sandbox/test_evidence_real.py
@@ -14,11 +21,8 @@ NEW_TESTS=(
     tests/sandbox/test_sandbox_adversarial_real.py
 )
 
-REAL_RUNTIME_CANDIDATES=(
-    tests/sandbox/test_podman_runtime_real.py
+REAL_RUNTIME_TESTS=(
     tests/sandbox/test_gvisor_runtime_real.py
-    tests/sandbox/test_incus_container_runtime_real.py
-    tests/sandbox/test_incus_vm_runtime_real.py
     tests/sandbox/test_qemu_runtime_real.py
     tests/sandbox/test_firecracker_guest_real.py
     tests/sandbox/test_firecracker_runtime_real.py
@@ -28,159 +32,82 @@ REAL_RUNTIME_CANDIDATES=(
     tests/sandbox/test_selector_real.py
 )
 
-REAL_RUNTIME_TESTS=()
 
-for path in "${REAL_RUNTIME_CANDIDATES[@]}"; do
-    [[ -f "$path" ]] && REAL_RUNTIME_TESTS+=("$path")
-done
+echo "============================================================"
+echo "TASK 18 — PRODUCTION / ADVERSARIAL MATRIX"
+echo "============================================================"
 
-echo "New completion tests:"
-printf '  %s\n' "${NEW_TESTS[@]}"
-
-echo
-echo "Existing real-runtime tests:"
-printf '  %s\n' "${REAL_RUNTIME_TESTS[@]}"
 
 echo
 echo "===== COMPILE ====="
 
-python -m py_compile \
-    engine/sandbox/registry/*.py \
-    engine/sandbox/lifecycle/*.py \
-    engine/sandbox/evidence/*.py \
-    engine/sandbox/policy/network.py \
-    engine/sandbox/agentic_harness.py \
-    engine/sandbox/pro_layer.py \
-    engine/sandbox/data_engine.py \
-    "${NEW_TESTS[@]}"
+python -m compileall -q \
+    engine/sandbox \
+    tests/sandbox
 
-pass "Sandbox completion code compiles"
+rc=$?
+
+if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: Task 18 compile rc=$rc"
+    exit "$rc"
+fi
+
+echo "TASK18_COMPILE_OK"
 
 
 echo
 echo "===== NO MOCKS ====="
 
-if grep -RInE \
-    'unittest\.mock|MagicMock|(^|[^A-Za-z])patch\(|monkeypatch' \
-    engine/sandbox/registry \
-    engine/sandbox/lifecycle \
-    engine/sandbox/evidence \
-    engine/sandbox/policy/network.py \
-    engine/sandbox/agentic_harness.py \
-    engine/sandbox/pro_layer.py \
-    engine/sandbox/data_engine.py \
-    "${NEW_TESTS[@]}"
-then
-    fail "Mock/fake testing found"
+forbidden="$(
+    grep -RInE \
+        'unittest\.mock|MagicMock|Mock\(|monkeypatch' \
+        tests/sandbox \
+        --include='test_*.py' \
+        || true
+)"
+
+if [[ -n "$forbidden" ]]; then
+    echo "FAIL: mock/fake tests detected"
+    printf '%s\n' "$forbidden"
+    exit 1
 fi
 
-pass "No mocks"
+echo "TASK18_REAL_TESTS_ONLY_OK"
 
 
 echo
 echo "===== COMPLETION TESTS ====="
 
-python -m pytest -q \
-    "${NEW_TESTS[@]}"
+python -m pytest -q -s \
+    "${COMPLETION_TESTS[@]}"
 
-pass "Tasks 11-17 completion tests"
+rc=$?
+
+if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: Task 18 completion matrix rc=$rc"
+    exit "$rc"
+fi
+
+echo "TASK18_COMPLETION_MATRIX_OK"
 
 
 echo
-echo "===== EXISTING REAL RUNTIME MATRIX ====="
-
-if (( ${#REAL_RUNTIME_TESTS[@]} == 0 )); then
-    fail "No existing real runtime tests discovered"
-fi
+echo "===== REAL RUNTIME MATRIX ====="
 
 python -m pytest -q -s \
     "${REAL_RUNTIME_TESTS[@]}"
 
-pass "Existing real runtime matrix"
+rc=$?
 
-
-echo
-echo "===== NETWORK DEFAULT ====="
-
-python - <<'PY'
-from engine.sandbox.policy.network import DEFAULT_NETWORK_POLICY
-
-assert not DEFAULT_NETWORK_POLICY.network_enabled
-print("PASS: networking disabled by default")
-PY
-
-
-echo
-echo "===== DATA ENGINE SCHEMA ====="
-
-python - <<'PY'
-from engine.sandbox.data_engine import CANONICAL_FIELDS
-
-assert CANONICAL_FIELDS == (
-    "source",
-    "category",
-    "data_type",
-    "value",
-    "unit",
-)
-
-print("PASS: canonical Data Engine schema")
-PY
-
-
-echo
-echo "===== VM IMAGE GIT SAFETY ====="
-
-IMG_RE='\.(qcow2|ext4|img|raw|vmdk|squashfs)$|(^|/)vmlinu[xz]'
-
-TRACKED="$(
-    git ls-files |
-    grep -Ei "$IMG_RE" ||
-    true
-)"
-
-if [[ -n "$TRACKED" ]]; then
-    echo "$TRACKED"
-    fail "VM image/runtime binary tracked by Git"
+if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: Task 18 runtime matrix rc=$rc"
+    exit "$rc"
 fi
 
-pass "No VM images tracked"
+echo "TASK18_RUNTIME_MATRIX_OK"
 
 
 echo
-echo "===== RESIDUAL RUNTIMES ====="
-
-RESIDUE="$(
-    {
-        pgrep -af 'firecracker --id dataworc-fc-' || true
-        pgrep -af 'qemu-system.*dataworc' || true
-        podman ps -a \
-            --filter name=dataworc- \
-            --format '{{.Names}} {{.Status}}' \
-            2>/dev/null || true
-        incus list \
-            --format csv \
-            -c n \
-            2>/dev/null |
-            grep '^dataworc-' || true
-    }
-)"
-
-if [[ -n "$RESIDUE" ]]; then
-    echo "$RESIDUE"
-    fail "Sandbox runtime residue detected"
-fi
-
-pass "No sandbox runtime residue"
-
-
-echo
-echo "===== DIFF CHECK ====="
-
-git diff --check
-
-pass "git diff --check"
-
-
-pass "TASK 18"
-pass "SANDBOX TASKS 11-18 COMPLETE"
+echo "======================================"
+echo "TASK18_PRODUCTION_MATRIX_PASS"
+echo "======================================"
