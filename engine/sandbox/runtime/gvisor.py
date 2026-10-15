@@ -19,6 +19,10 @@ class GVisorRuntimeUnavailable(RuntimeError):
     pass
 
 
+class GVisorCleanupError(RuntimeError):
+    pass
+
+
 class GVisorRuntime(SandboxRuntime):
     runtime_kind = RuntimeKind.GVISOR
 
@@ -181,6 +185,44 @@ class GVisorRuntime(SandboxRuntime):
 
         return command
 
+    @staticmethod
+    def _container_exists(
+        docker: Path,
+        container_name: str,
+    ) -> bool:
+        completed = subprocess.run(
+            [
+                str(docker),
+                "ps",
+                "-a",
+                "--filter",
+                f"name=^/{container_name}$",
+                "--format",
+                "{{.Names}}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+
+        if completed.returncode != 0:
+            detail = (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "Docker container verification failed"
+            )
+
+            raise GVisorCleanupError(detail)
+
+        names = {
+            line.strip()
+            for line in completed.stdout.splitlines()
+            if line.strip()
+        }
+
+        return container_name in names
+
     def _cleanup(
         self,
         docker: Path,
@@ -198,6 +240,15 @@ class GVisorRuntime(SandboxRuntime):
             check=False,
             timeout=30,
         )
+
+        if self._container_exists(
+            docker,
+            container_name,
+        ):
+            raise GVisorCleanupError(
+                "gVisor container survived cleanup: "
+                f"{container_name}"
+            )
 
     def execute(
         self,

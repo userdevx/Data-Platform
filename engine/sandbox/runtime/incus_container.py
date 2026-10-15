@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import subprocess
 import time
 from pathlib import Path
@@ -16,6 +18,10 @@ from engine.sandbox.runtime.base import SandboxRuntime
 
 
 class IncusContainerRuntimeUnavailable(RuntimeError):
+    pass
+
+
+class IncusContainerCleanupError(RuntimeError):
     pass
 
 
@@ -218,12 +224,64 @@ class IncusContainerRuntime(SandboxRuntime):
 
         return command
 
+    @staticmethod
+    def _instance_exists(
+        executable: Path,
+        instance_name: str,
+    ) -> bool:
+        completed = subprocess.run(
+            [
+                str(executable),
+                "list",
+                "--format=json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+
+        if completed.returncode != 0:
+            detail = (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "Incus instance verification failed"
+            )
+
+            raise IncusContainerCleanupError(detail)
+
+        try:
+            payload = json.loads(
+                completed.stdout
+            )
+        except json.JSONDecodeError as exc:
+            raise IncusContainerCleanupError(
+                "Invalid Incus list response"
+            ) from exc
+
+        if not isinstance(payload, list):
+            raise IncusContainerCleanupError(
+                "Unexpected Incus list response"
+            )
+
+        return any(
+            isinstance(item, dict)
+            and item.get("name") == instance_name
+            for item in payload
+        )
+
     def _cleanup(
         self,
         executable: Path,
         instance_name: str,
     ) -> None:
-        stopped = subprocess.run(
+        if not self._instance_exists(
+            executable,
+            instance_name,
+        ):
+            return
+
+        subprocess.run(
             [
                 str(executable),
                 "stop",
@@ -233,10 +291,13 @@ class IncusContainerRuntime(SandboxRuntime):
             capture_output=True,
             text=True,
             check=False,
-            timeout=30,
+            timeout=60,
         )
 
-        if stopped.returncode == 0:
+        if not self._instance_exists(
+            executable,
+            instance_name,
+        ):
             return
 
         subprocess.run(
@@ -249,8 +310,17 @@ class IncusContainerRuntime(SandboxRuntime):
             capture_output=True,
             text=True,
             check=False,
-            timeout=30,
+            timeout=60,
         )
+
+        if self._instance_exists(
+            executable,
+            instance_name,
+        ):
+            raise IncusContainerCleanupError(
+                "Incus instance survived cleanup: "
+                f"{instance_name}"
+            )
 
     def execute(
         self,
@@ -360,8 +430,7 @@ class IncusContainerRuntime(SandboxRuntime):
                 )
 
         finally:
-            if launched:
-                self._cleanup(
-                    executable,
-                    instance_name,
-                )
+            self._cleanup(
+                executable,
+                instance_name,
+            )

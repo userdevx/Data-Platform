@@ -30,6 +30,10 @@ class QemuRuntimeUnavailable(RuntimeError):
     pass
 
 
+class QemuCleanupError(RuntimeError):
+    pass
+
+
 class QemuRuntime(SandboxRuntime):
     runtime_kind = RuntimeKind.QEMU_KVM
 
@@ -398,8 +402,17 @@ class QemuRuntime(SandboxRuntime):
 
         try:
             process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
+        except subprocess.TimeoutExpired as exc:
+            raise QemuCleanupError(
+                "QEMU process survived SIGKILL: "
+                f"pid={process.pid}"
+            ) from exc
+
+        if process.poll() is None:
+            raise QemuCleanupError(
+                "QEMU process remained live after cleanup: "
+                f"pid={process.pid}"
+            )
 
     def execute(
         self,

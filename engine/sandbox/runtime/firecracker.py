@@ -48,6 +48,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from engine.sandbox.process_identity import (
+    process_identity_status,
+    process_start_time,
+)
 from engine.sandbox.guest_protocol import (
     PROTOCOL_FAILURE_EXIT_CODE,
     GuestProtocolError,
@@ -185,21 +189,6 @@ def _host_arch() -> str:
     return {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
 
 
-def process_start_time(pid: int) -> str | None:
-    """Kernel start time of pid (clock ticks since boot), or None if gone.
-
-    (pid, start time) identifies a process; a reused pid has a new time.
-    """
-
-    try:
-        stat_line = Path(f"/proc/{pid}/stat").read_text()
-    except (FileNotFoundError, ProcessLookupError, PermissionError):
-        return None
-
-    fields = stat_line.rsplit(")", 1)[1].split()
-    return fields[19] if len(fields) > 19 else None
-
-
 def _owner_alive(run_dir: Path) -> bool | None:
     """True/False for a recorded owner, None if no owner was recorded."""
 
@@ -209,7 +198,7 @@ def _owner_alive(run_dir: Path) -> bool | None:
     except (OSError, ValueError):
         return None
 
-    return process_start_time(pid) == start
+    return process_identity_status(pid, start)
 
 
 def _vm_processes_using(run_dir: Path) -> list[int]:

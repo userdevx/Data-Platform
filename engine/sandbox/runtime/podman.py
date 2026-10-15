@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import time
 from pathlib import Path
+from uuid import uuid4
 
 from engine.sandbox.discovery import discover_podman
 from engine.sandbox.models import (
@@ -18,6 +19,10 @@ class PodmanRuntimeUnavailable(RuntimeError):
     pass
 
 
+class PodmanCleanupError(RuntimeError):
+    pass
+
+
 class PodmanRuntime(SandboxRuntime):
     runtime_kind = RuntimeKind.PODMAN
 
@@ -30,16 +35,28 @@ class PodmanRuntime(SandboxRuntime):
     def _resolve_executable(self) -> Path:
         capability = discover_podman()
 
-        if not capability.available or capability.executable is None:
+        if (
+            not capability.available
+            or capability.executable is None
+        ):
             raise PodmanRuntimeUnavailable(
-                capability.reason or "Podman runtime unavailable"
+                capability.reason
+                or "Podman runtime unavailable"
             )
 
         return capability.executable
 
+    @staticmethod
+    def _container_name() -> str:
+        return (
+            "dataworc-podman-"
+            f"{uuid4().hex[:12]}"
+        )
+
     def _build_command(
         self,
         request: SandboxRequest,
+        container_name: str | None = None,
     ) -> list[str]:
         executable = self._resolve_executable()
 
@@ -59,6 +76,14 @@ class PodmanRuntime(SandboxRuntime):
             "/tmp:rw,noexec,nosuid,size=64m",
         ]
 
+        if container_name is not None:
+            command.extend(
+                [
+                    "--name",
+                    container_name,
+                ]
+            )
+
         if not request.network_enabled:
             command.extend(
                 [
@@ -68,11 +93,14 @@ class PodmanRuntime(SandboxRuntime):
             )
 
         if request.working_directory is not None:
-            workspace = request.working_directory.resolve()
+            workspace = (
+                request.working_directory.resolve()
+            )
 
             if not workspace.exists():
                 raise FileNotFoundError(
-                    f"Sandbox workspace does not exist: {workspace}"
+                    "Sandbox workspace does not exist: "
+                    f"{workspace}"
                 )
 
             mount_mode = (
@@ -84,13 +112,18 @@ class PodmanRuntime(SandboxRuntime):
             command.extend(
                 [
                     "--volume",
-                    f"{workspace}:/workspace:{mount_mode},Z",
+                    (
+                        f"{workspace}:/workspace:"
+                        f"{mount_mode},Z"
+                    ),
                     "--workdir",
                     "/workspace",
                 ]
             )
 
-        for key, value in request.environment.items():
+        for key, value in (
+            request.environment.items()
+        ):
             command.extend(
                 [
                     "--env",
@@ -103,64 +136,154 @@ class PodmanRuntime(SandboxRuntime):
 
         return command
 
+    @staticmethod
+    def _container_exists(
+        executable: Path,
+        container_name: str,
+    ) -> bool:
+        completed = subprocess.run(
+            [
+                str(executable),
+                "container",
+                "exists",
+                container_name,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+
+        if completed.returncode == 0:
+            return True
+
+        if completed.returncode == 1:
+            return False
+
+        detail = (
+            completed.stderr.strip()
+            or completed.stdout.strip()
+            or (
+                "Podman container existence "
+                "verification failed"
+            )
+        )
+
+        raise PodmanCleanupError(detail)
+
+    def _cleanup(
+        self,
+        executable: Path,
+        container_name: str,
+    ) -> None:
+        subprocess.run(
+            [
+                str(executable),
+                "rm",
+                "-f",
+                container_name,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+
+        if self._container_exists(
+            executable,
+            container_name,
+        ):
+            raise PodmanCleanupError(
+                "Podman container survived cleanup: "
+                f"{container_name}"
+            )
+
     def execute(
         self,
         request: SandboxRequest,
     ) -> SandboxResult:
-        command = self._build_command(request)
+        executable = self._resolve_executable()
+        container_name = self._container_name()
+
+        command = self._build_command(
+            request,
+            container_name=container_name,
+        )
 
         started = time.monotonic()
 
         try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=request.limits.timeout_seconds + 10,
-            )
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=(
+                        request.limits.timeout_seconds
+                        + 10
+                    ),
+                )
 
-            duration_seconds = time.monotonic() - started
+                duration_seconds = (
+                    time.monotonic() - started
+                )
 
-            timed_out = (
-                completed.returncode == 255
-                and duration_seconds
-                >= request.limits.timeout_seconds
-            )
+                timed_out = (
+                    completed.returncode == 255
+                    and duration_seconds
+                    >= request.limits.timeout_seconds
+                )
 
-            return SandboxResult(
-                runtime_kind=self.runtime_kind,
-                isolation_class=IsolationClass.HOST_OS,
-                command=tuple(command),
-                exit_code=completed.returncode,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
-                timed_out=timed_out,
-                duration_seconds=duration_seconds,
-            )
+                return SandboxResult(
+                    runtime_kind=self.runtime_kind,
+                    isolation_class=(
+                        IsolationClass.HOST_OS
+                    ),
+                    command=tuple(command),
+                    exit_code=completed.returncode,
+                    stdout=completed.stdout,
+                    stderr=completed.stderr,
+                    timed_out=timed_out,
+                    duration_seconds=(
+                        duration_seconds
+                    ),
+                )
 
-        except subprocess.TimeoutExpired as exc:
-            duration_seconds = time.monotonic() - started
+            except subprocess.TimeoutExpired as exc:
+                duration_seconds = (
+                    time.monotonic() - started
+                )
 
-            stdout = (
-                exc.stdout
-                if isinstance(exc.stdout, str)
-                else ""
-            )
+                stdout = (
+                    exc.stdout
+                    if isinstance(exc.stdout, str)
+                    else ""
+                )
 
-            stderr = (
-                exc.stderr
-                if isinstance(exc.stderr, str)
-                else ""
-            )
+                stderr = (
+                    exc.stderr
+                    if isinstance(exc.stderr, str)
+                    else ""
+                )
 
-            return SandboxResult(
-                runtime_kind=self.runtime_kind,
-                isolation_class=IsolationClass.HOST_OS,
-                command=tuple(command),
-                exit_code=124,
-                stdout=stdout,
-                stderr=stderr,
-                timed_out=True,
-                duration_seconds=duration_seconds,
+                return SandboxResult(
+                    runtime_kind=self.runtime_kind,
+                    isolation_class=(
+                        IsolationClass.HOST_OS
+                    ),
+                    command=tuple(command),
+                    exit_code=124,
+                    stdout=stdout,
+                    stderr=stderr,
+                    timed_out=True,
+                    duration_seconds=(
+                        duration_seconds
+                    ),
+                )
+
+        finally:
+            self._cleanup(
+                executable,
+                container_name,
             )
