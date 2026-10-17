@@ -153,6 +153,93 @@ def process_automatic_model_request(
             "is required."
         )
 
+    if clean_capability == "text_input":
+        from engine.intelligence.tool_loop import (
+            route_grounded_request,
+        )
+
+        grounded_result = (
+            route_grounded_request(
+                clean_question
+            )
+        )
+
+        if grounded_result is not None:
+            status = str(
+                grounded_result.get(
+                    "status",
+                    "error",
+                )
+            )
+
+            answer = str(
+                grounded_result.get(
+                    "answer",
+                    "",
+                )
+            )
+
+            return {
+                "status": status,
+                "answer": answer,
+                "results": [],
+                "raw": {
+                    "status": status,
+                    "answer": answer,
+                    "route": (
+                        "deterministic_tool_routing"
+                    ),
+                    "source": (
+                        "email_service"
+                    ),
+                    "capability": (
+                        clean_capability
+                    ),
+                    "provider_id": (
+                        "email_service"
+                    ),
+                    "model_id": "",
+                    "processing_location": (
+                        "local"
+                    ),
+                    "records_used": [],
+                    "insights": [],
+                    "metadata": {
+                        "tool_calls": (
+                            grounded_result.get(
+                                "tool_calls",
+                                0,
+                            )
+                        ),
+                        "trajectory": (
+                            grounded_result.get(
+                                "trajectory",
+                                [],
+                            )
+                        ),
+                        "observation": (
+                            grounded_result.get(
+                                "observation",
+                                {},
+                            )
+                        ),
+                    },
+                    "selection": {
+                        "required_capability": (
+                            clean_capability
+                        ),
+                        "candidate_count": 0,
+                        "selected_provider_id": (
+                            "email_service"
+                        ),
+                        "selected_model_id": "",
+                        "processing_location": (
+                            "local"
+                        ),
+                    },
+                },
+            }
+
     request_arguments = (
         _validate_request_arguments(
             required_capability=(
