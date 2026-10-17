@@ -6,6 +6,7 @@ from pathlib import Path
 from engine.application.automatic_model_request_action import (
     process_automatic_model_request,
 )
+from engine.intelligence.application_generation_capability import ApplicationGenerationCapability
 from engine.intelligence.generation_request import (
     IMAGE_GENERATION,
     resolve_generation_capability,
@@ -1079,6 +1080,7 @@ CAPABILITIES = {
     "record_query": RecordQueryCapability(),
     "knowledge_search": KnowledgeSearchCapability(),
     "public_source_search": PublicSourceSearchCapability(),
+    "application_generation": ApplicationGenerationCapability(),
     "model_reasoning": ModelReasoningCapability(),
 }
 

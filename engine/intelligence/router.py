@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from engine.intelligence.generation_request import is_simple_code_request
+
 from dataclasses import dataclass
 
+from engine.intelligence.generation_request import (
+    APPLICATION_GENERATION,
+    resolve_generation_capability,
+)
 from engine.intelligence.memory_runtime import (
     is_explicit_memory_command,
 )
@@ -25,79 +31,208 @@ class IntelligenceRouter:
     ) -> IntelligenceRoute:
         text = request.normalized_question
 
-        # Deterministic routes must run before model reasoning.
-        if self._datetime(text) and "answer_datetime_questions" in enabled_abilities:
+
+        # A bounded code request is model reasoning/code generation.
+        # A request for an application, repository, project, or
+        # software lifecycle continues through Application Generation.
+        if is_simple_code_request(text):
+            if "model_reasoning" in enabled_abilities:
+                return IntelligenceRoute(
+                    ability_name="model_reasoning",
+                    reason=(
+                        "Matched route: "
+                        "simple_code_generation"
+                    ),
+                    confidence=0.97,
+                )
+            else:
+                pass
+        else:
+            pass
+
+        # Deterministic routes run before model reasoning.
+        if (
+            self._datetime(text)
+            and "answer_datetime_questions"
+            in enabled_abilities
+        ):
             return IntelligenceRoute(
-                ability_name="answer_datetime_questions",
+                ability_name=(
+                    "answer_datetime_questions"
+                ),
                 reason="Matched route: datetime",
                 confidence=0.98,
             )
 
         if (
-            self._public_source_search(text)
-            and "search_public_sources" in enabled_abilities
+            self._application_generation(
+                text
+            )
+            and "application_generation"
+            in enabled_abilities
         ):
             return IntelligenceRoute(
-                ability_name="search_public_sources",
-                reason="Matched route: public_source_search",
+                ability_name=(
+                    "application_generation"
+                ),
+                reason=(
+                    "Matched route: "
+                    "application_generation"
+                ),
+                confidence=0.98,
+            )
+
+        if (
+            self._public_source_search(text)
+            and "search_public_sources"
+            in enabled_abilities
+        ):
+            return IntelligenceRoute(
+                ability_name=(
+                    "search_public_sources"
+                ),
+                reason=(
+                    "Matched route: "
+                    "public_source_search"
+                ),
                 confidence=0.95,
             )
 
         checks = {
             "identity": self._identity,
             "datetime": self._datetime,
-            "memory_command": self._memory_command,
-            "system_status": self._system_status,
-            "record_query": self._record_query,
-            "knowledge_search": self._knowledge_search,
-            "public_source_search": self._public_source_search,
-            "model_reasoning": self._model_reasoning,
+            "application_generation": (
+                self._application_generation
+            ),
+            "memory_command": (
+                self._memory_command
+            ),
+            "system_status": (
+                self._system_status
+            ),
+            "record_query": (
+                self._record_query
+            ),
+            "knowledge_search": (
+                self._knowledge_search
+            ),
+            "public_source_search": (
+                self._public_source_search
+            ),
+            "model_reasoning": (
+                self._model_reasoning
+            ),
         }
 
         ability_map = {
-            "identity": "identify_instance",
-            "datetime": "answer_datetime_questions",
-            "memory_command": "manage_memory",
-            "system_status": "report_system_health",
-            "record_query": "answer_record_questions",
-            "knowledge_search": "retrieve_platform_knowledge",
-            "public_source_search": "search_public_sources",
-            "model_reasoning": "model_reasoning",
+            "identity": (
+                "identify_instance"
+            ),
+            "datetime": (
+                "answer_datetime_questions"
+            ),
+            "application_generation": (
+                "application_generation"
+            ),
+            "memory_command": (
+                "manage_memory"
+            ),
+            "system_status": (
+                "report_system_health"
+            ),
+            "record_query": (
+                "answer_record_questions"
+            ),
+            "knowledge_search": (
+                "retrieve_platform_knowledge"
+            ),
+            "public_source_search": (
+                "search_public_sources"
+            ),
+            "model_reasoning": (
+                "model_reasoning"
+            ),
         }
 
         for route_name in priority:
-            check = checks.get(route_name)
+            check = checks.get(
+                route_name
+            )
 
             if check is None:
                 continue
 
             if check(text):
-                ability_name = ability_map.get(route_name)
+                ability_name = (
+                    ability_map.get(
+                        route_name
+                    )
+                )
 
-                if ability_name in enabled_abilities:
+                if (
+                    ability_name
+                    in enabled_abilities
+                ):
                     return IntelligenceRoute(
-                        ability_name=ability_name,
-                        reason=f"Matched route: {route_name}",
+                        ability_name=(
+                            ability_name
+                        ),
+                        reason=(
+                            "Matched route: "
+                            f"{route_name}"
+                        ),
                         confidence=0.90,
                     )
 
-        if "model_reasoning" in enabled_abilities:
+        if (
+            "model_reasoning"
+            in enabled_abilities
+        ):
             return IntelligenceRoute(
-                ability_name="model_reasoning",
-                reason="Fallback routed request to model reasoning.",
+                ability_name=(
+                    "model_reasoning"
+                ),
+                reason=(
+                    "Fallback routed request "
+                    "to model reasoning."
+                ),
                 confidence=0.55,
             )
 
         return IntelligenceRoute(
             ability_name=None,
-            reason="No enabled ability matched the request.",
+            reason=(
+                "No enabled ability matched "
+                "the request."
+            ),
             confidence=0.0,
         )
 
-    def _memory_command(self, text: str) -> bool:
-        return is_explicit_memory_command(text)
+    def _application_generation(
+        self,
+        text: str,
+    ) -> bool:
+        return (
+            resolve_generation_capability(
+                text
+            )
+            == APPLICATION_GENERATION
+        )
 
-    def _datetime(self, text: str) -> bool:
+    def _memory_command(
+        self,
+        text: str,
+    ) -> bool:
+        return (
+            is_explicit_memory_command(
+                text
+            )
+        )
+
+    def _datetime(
+        self,
+        text: str,
+    ) -> bool:
         phrases = [
             "today's date",
             "todays date",
@@ -114,9 +249,15 @@ class IntelligenceRouter:
             "time now",
         ]
 
-        return any(phrase in text for phrase in phrases)
+        return any(
+            phrase in text
+            for phrase in phrases
+        )
 
-    def _identity(self, text: str) -> bool:
+    def _identity(
+        self,
+        text: str,
+    ) -> bool:
         return any(
             phrase in text
             for phrase in [
@@ -127,7 +268,10 @@ class IntelligenceRouter:
             ]
         )
 
-    def _system_status(self, text: str) -> bool:
+    def _system_status(
+        self,
+        text: str,
+    ) -> bool:
         return any(
             phrase in text
             for phrase in [
@@ -140,7 +284,10 @@ class IntelligenceRouter:
             ]
         )
 
-    def _record_query(self, text: str) -> bool:
+    def _record_query(
+        self,
+        text: str,
+    ) -> bool:
         return any(
             phrase in text
             for phrase in [
@@ -159,7 +306,10 @@ class IntelligenceRouter:
             ]
         )
 
-    def _knowledge_search(self, text: str) -> bool:
+    def _knowledge_search(
+        self,
+        text: str,
+    ) -> bool:
         normalized = " ".join(
             text.lower().split()
         ).strip()
@@ -167,22 +317,31 @@ class IntelligenceRouter:
         if not normalized:
             return False
 
-        # Keep more-specific deterministic routes from being
-        # intercepted by generic local knowledge retrieval.
-        if self._memory_command(normalized):
+        if self._memory_command(
+            normalized
+        ):
             return False
 
-        if self._datetime(normalized):
+        if self._datetime(
+            normalized
+        ):
             return False
 
-        if self._record_query(normalized):
+        if self._record_query(
+            normalized
+        ):
             return False
 
-        if self._public_source_search(normalized):
+        if self._public_source_search(
+            normalized
+        ):
             return False
 
-        # Knowledge subjects are discovered from the existing
-        # local knowledge store instead of a hardcoded phrase list.
+        if self._application_generation(
+            normalized
+        ):
+            return False
+
         return bool(
             search_pages(
                 normalized,
@@ -190,8 +349,13 @@ class IntelligenceRouter:
             )
         )
 
-    def _public_source_search(self, text: str) -> bool:
-        normalized = " ".join(text.lower().split()).strip()
+    def _public_source_search(
+        self,
+        text: str,
+    ) -> bool:
+        normalized = " ".join(
+            text.lower().split()
+        ).strip()
 
         if not normalized:
             return False
@@ -248,33 +412,41 @@ class IntelligenceRouter:
             for source in explicit_sources
         )
 
-        has_explicit_search_action = any(
+        has_search_action = any(
             action in normalized
-            for action in explicit_search_actions
+            for action
+            in explicit_search_actions
         )
 
-        requests_entity_research = any(
-            normalized.startswith(prefix)
-            for prefix in entity_research_prefixes
+        entity_research = any(
+            normalized.startswith(
+                prefix
+            )
+            for prefix
+            in entity_research_prefixes
         )
 
-        requests_current_fact = any(
-            normalized.startswith(prefix)
-            for prefix in current_fact_prefixes
-        )
-
-        explicit_source_search = (
-            has_explicit_source
-            and has_explicit_search_action
+        current_fact = any(
+            normalized.startswith(
+                prefix
+            )
+            for prefix
+            in current_fact_prefixes
         )
 
         return (
-            explicit_source_search
-            or requests_entity_research
-            or requests_current_fact
+            (
+                has_explicit_source
+                and has_search_action
+            )
+            or entity_research
+            or current_fact
         )
 
-    def _model_reasoning(self, text: str) -> bool:
+    def _model_reasoning(
+        self,
+        text: str,
+    ) -> bool:
         return any(
             phrase in text
             for phrase in [
