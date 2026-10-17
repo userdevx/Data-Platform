@@ -1,0 +1,9 @@
+{
+  "imap": {
+    "host": "imap.gmail.com",
+    "port": 993,
+    "tls_mode": "ssl",
+    "mailbox": "INBOX",
+    "max_messages": 10
+  }
+}
