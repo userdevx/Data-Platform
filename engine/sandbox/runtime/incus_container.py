@@ -126,15 +126,18 @@ class IncusContainerRuntime(SandboxRuntime):
 
         return f"{allowance_ms}ms/{period_ms}ms"
 
-    def _build_launch_command(
+    def _build_create_command(
         self,
         executable: Path,
         instance_name: str,
         request: SandboxRequest,
     ) -> list[str]:
+        # Created stopped: with --no-profiles, `launch --device` can only
+        # override profile devices, so the workspace disk must be added
+        # before the first start.
         command = [
             str(executable),
-            "launch",
+            "init",
             self._image,
             instance_name,
             "--ephemeral",
@@ -162,33 +165,46 @@ class IncusContainerRuntime(SandboxRuntime):
                 ]
             )
 
-        if request.working_directory is not None:
-            workspace = request.working_directory.resolve()
-
-            if not workspace.exists():
-                raise FileNotFoundError(
-                    f"Sandbox workspace does not exist: {workspace}"
-                )
-
-            readonly = (
-                "false"
-                if request.writable_workspace
-                else "true"
-            )
-
-            command.extend(
-                [
-                    "--device",
-                    (
-                        "workspace,disk,"
-                        f"source={workspace},"
-                        "path=/workspace,"
-                        f"readonly={readonly}"
-                    ),
-                ]
-            )
-
         return command
+
+    @staticmethod
+    def _build_workspace_device_command(
+        executable: Path,
+        instance_name: str,
+        request: SandboxRequest,
+    ) -> list[str] | None:
+        if request.working_directory is None:
+            return None
+
+        workspace = request.working_directory.resolve()
+
+        if not workspace.exists():
+            raise FileNotFoundError(
+                f"Sandbox workspace does not exist: {workspace}"
+            )
+
+        readonly = (
+            "false"
+            if request.writable_workspace
+            else "true"
+        )
+
+        return [
+            str(executable),
+            "config",
+            "device",
+            "add",
+            instance_name,
+            "workspace",
+            "disk",
+            f"source={workspace}",
+            "path=/workspace",
+            f"readonly={readonly}",
+            # Unprivileged container root maps to a host subordinate uid
+            # that does not own the workspace; an idmapped mount presents
+            # host ownership inside the container.
+            "shift=true",
+        ]
 
     def _build_exec_command(
         self,
@@ -333,41 +349,56 @@ class IncusContainerRuntime(SandboxRuntime):
 
         instance_name = self._instance_name()
 
-        launch_command = self._build_launch_command(
-            executable,
-            instance_name,
-            request,
-        )
+        provisioning_commands = [
+            self._build_create_command(
+                executable,
+                instance_name,
+                request,
+            ),
+            self._build_workspace_device_command(
+                executable,
+                instance_name,
+                request,
+            ),
+            [
+                str(executable),
+                "start",
+                instance_name,
+            ],
+        ]
 
         started = time.monotonic()
-        launched = False
 
         try:
-            launch_completed = subprocess.run(
-                launch_command,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=self._provisioning_timeout_seconds,
-            )
+            for provisioning_command in provisioning_commands:
+                if provisioning_command is None:
+                    continue
 
-            if launch_completed.returncode != 0:
-                duration_seconds = (
-                    time.monotonic() - started
+                provisioning_completed = subprocess.run(
+                    provisioning_command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=self._provisioning_timeout_seconds,
                 )
 
-                return SandboxResult(
-                    runtime_kind=self.runtime_kind,
-                    isolation_class=IsolationClass.HOST_OS,
-                    command=tuple(launch_command),
-                    exit_code=launch_completed.returncode,
-                    stdout=launch_completed.stdout,
-                    stderr=launch_completed.stderr,
-                    timed_out=False,
-                    duration_seconds=duration_seconds,
-                )
+                if provisioning_completed.returncode != 0:
+                    duration_seconds = (
+                        time.monotonic() - started
+                    )
 
-            launched = True
+                    return SandboxResult(
+                        runtime_kind=self.runtime_kind,
+                        isolation_class=IsolationClass.HOST_OS,
+                        command=tuple(provisioning_command),
+                        exit_code=(
+                            provisioning_completed.returncode
+                        ),
+                        stdout=provisioning_completed.stdout,
+                        stderr=provisioning_completed.stderr,
+                        timed_out=False,
+                        duration_seconds=duration_seconds,
+                    )
 
             exec_command = self._build_exec_command(
                 executable,
