@@ -745,10 +745,31 @@ class ModelReasoningCapability:
                 f"{memory_context}\n"
             )
 
+        # Assigned before the branch: the image path does not read
+        # conversation context, but the block below is evaluated on
+        # every path.
+        conversation_context = str(
+            request.metadata.get(
+                "conversation_context",
+                "",
+            )
+        ).strip()
+
+        conversation_block = ""
+
+        if conversation_context:
+            conversation_block = (
+                "\n\nRecent and relevant prior "
+                "conversation from the Data Engine:\n"
+                f"{conversation_context}\n"
+            )
+
         if (
             required_capability
             == IMAGE_GENERATION
         ):
+            # A diffusion model takes the subject, not an
+            # instruction block written for a text model.
             prompt = request.question
         else:
             prompt = (
@@ -770,6 +791,7 @@ class ModelReasoningCapability:
                 "Use relevant stored context only "
                 "when it materially helps answer "
                 "the request.\n"
+                f"{conversation_block}\n"
                 f"{memory_block}\n"
                 f"User request: {request.question}"
             )
