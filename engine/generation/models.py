@@ -65,9 +65,9 @@ def utc_now() -> str:
 
 @dataclass(frozen=True)
 class GenerationProfile:
-    steps: int = 8
-    width: int = 256
-    height: int = 256
+    steps: int = 20
+    width: int = 384
+    height: int = 384
     seed: int = 17
     guidance_scale: float = 7.5
     negative_prompt: str = ""

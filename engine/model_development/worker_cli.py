@@ -70,19 +70,19 @@ def build_parser(
     execute.add_argument(
         "--steps",
         type=int,
-        default=8,
+        default=20,
     )
 
     execute.add_argument(
         "--width",
         type=int,
-        default=256,
+        default=384,
     )
 
     execute.add_argument(
         "--height",
         type=int,
-        default=256,
+        default=384,
     )
 
     execute.add_argument(
