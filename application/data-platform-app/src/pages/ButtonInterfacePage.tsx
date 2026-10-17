@@ -455,6 +455,7 @@ export default function ButtonInterfacePage() {
 
     setRuntimeStatus("thinking");
     setErrorMessage("");
+    setResponse(null);
 
     const submittedEvent =
       createRequestSubmittedEvent(
@@ -485,7 +486,9 @@ export default function ButtonInterfacePage() {
       setResponse(
         execution.response,
       );
+      setErrorMessage("");
     } else {
+      setResponse(null);
       setErrorMessage(
         execution.errorMessage,
       );
