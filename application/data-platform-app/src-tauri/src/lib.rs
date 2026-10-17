@@ -1,6 +1,7 @@
 mod agent_bridge;
 mod developer_terminal;
 mod intelligence_bridge;
+mod messaging_bridge;
 mod model_bridge;
 mod visual_bridge;
 
@@ -1605,6 +1606,10 @@ pub fn run() {
             agent_bridge::read_agent_log,
             developer_terminal::get_developer_terminal_context,
             developer_terminal::run_developer_terminal_command,
+            messaging_bridge::get_messaging_status,
+            messaging_bridge::messaging_register_account,
+            messaging_bridge::create_initial_admin,
+            messaging_bridge::has_admin_account,
             visual_bridge::get_visual_runtime_status,
             visual_bridge::analyze_visual_image
         ])
