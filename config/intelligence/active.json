@@ -5,6 +5,7 @@
       "report_system_health",
       "answer_record_questions",
       "retrieve_platform_knowledge",
+      "application_generation",
       "model_reasoning",
       "search_public_sources",
       "answer_datetime_questions",
@@ -17,7 +18,8 @@
       "count",
       "status",
       "search",
-      "append_history"
+      "append_history",
+      "write"
     ],
     "direct_storage_access": false,
     "enabled": true
@@ -42,9 +44,9 @@
     "modify_system_files": false,
     "network_access": true,
     "read_records": true,
-    "run_approved_commands": false,
+    "run_approved_commands": true,
     "write_history": true,
-    "write_records": false
+    "write_records": true
   },
   "provider": {
     "enabled": true,
@@ -69,6 +71,7 @@
       "public_source_search",
       "datetime",
       "memory_command",
+      "application_generation",
       "model_reasoning"
     ],
     "strategy": "deterministic_first"
@@ -79,7 +82,10 @@
       "query_data_engine",
       "search_knowledge",
       "write_intelligence_history",
-      "public_source_search"
+      "public_source_search",
+      "list_files",
+      "read_files",
+      "write_files"
     ]
   },
   "validation": {
