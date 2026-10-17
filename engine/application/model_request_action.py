@@ -446,8 +446,23 @@ def _ask_ollama(
                     "content": question,
                 }
             ],
+            # Measured on this host: qwen3:8b answered "Reply with:
+            # ok" using 722 tokens in 177s with thinking enabled, and
+            # 2 tokens in 1.9s with it disabled.
+            "think": False,
+            # Hold the model in memory between requests. Reloading
+            # ~5GB per request dominates wall time on CPU.
+            "keep_alive": "30m",
             "options": {
-                "num_predict": 1024,
+                # At ~4-6 tok/s a 1024-token answer costs four
+                # minutes. 384 caps worst-case latency without
+                # truncating ordinary responses.
+                "num_predict": 384,
+                # Must match the ContextWindowManager capacity.
+                # Ollama defaults to 4096 with --context-shift, which
+                # silently evicts the oldest tokens -- the retrieved
+                # conversation context -- before the model reads them.
+                "num_ctx": 8192,
             },
         },
     )
