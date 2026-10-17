@@ -273,10 +273,19 @@ def process_manual_model_request(
 
     results: list[dict[str, Any]] = []
 
+    # text_input, text_generation and code_generation are all chat
+    # completions against the same endpoint. The prompt differs; the
+    # transport does not.
+    OLLAMA_TEXT_CAPABILITIES = {
+        "text_input",
+        "text_generation",
+        "code_generation",
+    }
+
     if provider.adapter_type == "ollama":
         if (
             selected_capability
-            != "text_input"
+            not in OLLAMA_TEXT_CAPABILITIES
         ):
             raise VisualProviderUnavailableError(
                 "The selected model does not "
