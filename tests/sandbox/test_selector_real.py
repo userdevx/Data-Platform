@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from engine.sandbox.discovery import discover_runtimes
@@ -86,9 +88,12 @@ def test_real_selector_vm_boundary_uses_available_hardware_runtime() -> None:
 
     # Hardware runtimes that have a runtime adapter wired into the
     # selector. A runtime that is discovered on the host but has no
-    # adapter must never be selected. Update this tuple when Task 12W
-    # wires QEMU/KVM, Firecracker and Kata into the selector.
-    implemented_hardware = (RuntimeKind.INCUS_VM,)
+    # adapter must never be selected. Update this tuple when QEMU/KVM
+    # and Kata are wired into the selector.
+    implemented_hardware = (
+        RuntimeKind.FIRECRACKER,
+        RuntimeKind.INCUS_VM,
+    )
 
     hardware_priority = (
         RuntimeKind.FIRECRACKER,
@@ -135,3 +140,52 @@ def test_real_selector_never_downgrades_generated_code() -> None:
     )
 
     print("NO_SECURITY_DOWNGRADE_OK")
+
+
+def test_real_selector_hardware_skips_firecracker_for_workspace(
+    tmp_path: Path,
+) -> None:
+    available = _available()
+
+    assert available[RuntimeKind.FIRECRACKER] is True
+    assert available[RuntimeKind.INCUS_VM] is True
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.SYSTEM,
+        trust_level=TrustLevel.UNTRUSTED,
+        command=("true",),
+        working_directory=tmp_path,
+        requires_vm_boundary=True,
+    )
+
+    selection = select_runtime(request)
+
+    # Firecracker cannot transfer a host workspace; the request must
+    # stay at hardware isolation on the next runtime, not downgrade.
+    assert selection.isolation_class == IsolationClass.HARDWARE
+    assert selection.runtime_kind == RuntimeKind.INCUS_VM
+
+    print(
+        "HARDWARE_WORKSPACE_FALLBACK_OK "
+        f"runtime={selection.runtime_kind.value}"
+    )
+
+
+def test_real_selector_reports_firecracker_incompatibility() -> None:
+    request = SandboxRequest(
+        workload_type=WorkloadType.SYSTEM,
+        trust_level=TrustLevel.UNTRUSTED,
+        command=("true",),
+        network_enabled=True,
+        requires_vm_boundary=True,
+    )
+
+    selection = select_runtime(request)
+
+    assert selection.runtime_kind != RuntimeKind.FIRECRACKER
+    assert selection.isolation_class == IsolationClass.HARDWARE
+
+    print(
+        "FIRECRACKER_NETWORK_SKIPPED_OK "
+        f"runtime={selection.runtime_kind.value}"
+    )

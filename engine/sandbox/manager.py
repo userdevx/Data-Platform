@@ -8,6 +8,7 @@ from engine.sandbox.models import (
     SandboxResult,
 )
 from engine.sandbox.runtime.base import SandboxRuntime
+from engine.sandbox.runtime.firecracker import FirecrackerRuntime
 from engine.sandbox.runtime.gvisor import GVisorRuntime
 from engine.sandbox.runtime.incus_container import (
     IncusContainerRuntime,
@@ -39,6 +40,7 @@ class SandboxManager:
                 RuntimeKind.INCUS_CONTAINER: IncusContainerRuntime,
                 RuntimeKind.GVISOR: GVisorRuntime,
                 RuntimeKind.INCUS_VM: IncusVmRuntime,
+                RuntimeKind.FIRECRACKER: FirecrackerRuntime,
             }
         )
 

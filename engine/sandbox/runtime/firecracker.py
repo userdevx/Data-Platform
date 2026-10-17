@@ -184,6 +184,35 @@ def guest_image_dir(store: Path, arch: str, digest: str) -> Path:
     return store.parent / f"{arch}-dataworc-{digest[:12]}"
 
 
+def request_incompatibility(request: SandboxRequest) -> str | None:
+    """Return why this runtime cannot run *request*, or None if it can.
+
+    The selector uses this to route such requests to another hardware
+    runtime instead of selecting Firecracker and failing at execution.
+    """
+
+    limits = request.limits
+
+    if request.network_enabled:
+        return (
+            "Firecracker network access is disabled until the Sandbox "
+            "network policy layer implements approved egress"
+        )
+
+    if request.working_directory is not None or request.writable_workspace:
+        return "Firecracker host workspace transfer is not implemented yet"
+
+    cpu = float(limits.cpu_count)
+
+    if not cpu.is_integer() or not 1 <= cpu <= MAX_VCPUS:
+        return f"Firecracker CPU limit must be a whole number 1..{MAX_VCPUS}"
+
+    if limits.memory_mb < MIN_MEMORY_MB:
+        return f"Firecracker requires at least {MIN_MEMORY_MB} MiB of memory"
+
+    return None
+
+
 def _host_arch() -> str:
     machine = platform.machine()
     return {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
@@ -254,28 +283,10 @@ class FirecrackerRuntime(SandboxRuntime):
     def _validate_request(self, request: SandboxRequest) -> dict:
         limits = request.limits
 
-        if request.network_enabled:
-            raise ValueError(
-                "Firecracker network access is disabled until the Sandbox "
-                "network policy layer implements approved egress"
-            )
+        incompatibility = request_incompatibility(request)
 
-        if request.working_directory is not None or request.writable_workspace:
-            raise ValueError(
-                "Firecracker host workspace transfer is not implemented yet"
-            )
-
-        cpu = float(limits.cpu_count)
-
-        if not cpu.is_integer() or not 1 <= cpu <= MAX_VCPUS:
-            raise ValueError(
-                f"Firecracker CPU limit must be a whole number 1..{MAX_VCPUS}"
-            )
-
-        if limits.memory_mb < MIN_MEMORY_MB:
-            raise ValueError(
-                f"Firecracker requires at least {MIN_MEMORY_MB} MiB of memory"
-            )
+        if incompatibility is not None:
+            raise ValueError(incompatibility)
 
         if limits.timeout_seconds <= 0:
             raise ValueError("Timeout must be greater than zero")

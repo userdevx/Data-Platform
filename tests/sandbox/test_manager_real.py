@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 from engine.sandbox.manager import SandboxManager
 from engine.sandbox.models import (
@@ -169,7 +170,66 @@ grep "^CapEff:" /proc/self/status
     print("MANAGER_KERNEL_EMULATION_OK")
 
 
-def test_manager_real_hardware_execution() -> None:
+def _firecracker_processes() -> str:
+    completed = subprocess.run(
+        ["pgrep", "-af", "firecracker --id dataworc-fc-"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    return (
+        completed.stdout.strip()
+        if completed.returncode == 0
+        else ""
+    )
+
+
+def test_manager_real_firecracker_execution() -> None:
+    manager = SandboxManager()
+
+    request = SandboxRequest(
+        workload_type=WorkloadType.SYSTEM,
+        trust_level=TrustLevel.UNTRUSTED,
+        command=(
+            "/bin/sh",
+            "-c",
+            "echo MANAGER_FIRECRACKER_OK; "
+            "systemd-detect-virt || true; "
+            "nproc",
+        ),
+        requires_vm_boundary=True,
+        limits=ResourceLimits(
+            cpu_count=2,
+            memory_mb=512,
+            timeout_seconds=30,
+            pids=32,
+        ),
+    )
+
+    result = manager.execute(request)
+
+    print(result.stdout)
+
+    assert result.runtime_kind == RuntimeKind.FIRECRACKER
+    assert result.isolation_class == IsolationClass.HARDWARE
+    assert result.exit_code == 0
+    assert result.timed_out is False
+
+    lines = [line.strip() for line in result.stdout.splitlines()]
+    start = lines.index("MANAGER_FIRECRACKER_OK")
+
+    assert lines[start + 1] == "kvm"
+    assert lines[start + 2] == "2"
+
+    assert _firecracker_processes() == ""
+
+    print("MANAGER_FIRECRACKER_OK")
+
+
+def test_manager_real_hardware_workspace_uses_incus_vm(
+    tmp_path: Path,
+) -> None:
     manager = SandboxManager()
 
     request = SandboxRequest(
@@ -186,6 +246,9 @@ uname -r
 ip addr show
 """,
         ),
+        # Firecracker cannot transfer a host workspace, so the
+        # selector must fall back to the next hardware runtime.
+        working_directory=tmp_path,
         requires_vm_boundary=True,
         limits=ResourceLimits(
             cpu_count=2,

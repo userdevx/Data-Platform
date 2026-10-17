@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from engine.sandbox.discovery import discover_runtimes
 from engine.sandbox.models import (
     IsolationClass,
@@ -9,6 +11,9 @@ from engine.sandbox.models import (
     SandboxSelection,
 )
 from engine.sandbox.policy.evaluator import required_isolation
+from engine.sandbox.runtime.firecracker import (
+    request_incompatibility as firecracker_request_incompatibility,
+)
 
 
 class SandboxRuntimeUnavailable(RuntimeError):
@@ -41,8 +46,19 @@ _IMPLEMENTED_RUNTIMES = frozenset(
         RuntimeKind.INCUS_CONTAINER,
         RuntimeKind.GVISOR,
         RuntimeKind.INCUS_VM,
+        RuntimeKind.FIRECRACKER,
     }
 )
+
+
+# Runtimes that can only run a subset of requests at their isolation
+# class. Each check returns why the request is unsupported, or None.
+_REQUEST_COMPATIBILITY: dict[
+    RuntimeKind,
+    Callable[[SandboxRequest], str | None],
+] = {
+    RuntimeKind.FIRECRACKER: firecracker_request_incompatibility,
+}
 
 
 def _index_capabilities(
@@ -87,6 +103,20 @@ def select_runtime(
             unavailable_reasons.append(
                 f"{runtime_kind.value}: "
                 "runtime adapter not implemented"
+            )
+            continue
+
+        compatibility = _REQUEST_COMPATIBILITY.get(runtime_kind)
+
+        incompatibility = (
+            compatibility(request)
+            if compatibility is not None
+            else None
+        )
+
+        if incompatibility is not None:
+            unavailable_reasons.append(
+                f"{runtime_kind.value}: {incompatibility}"
             )
             continue
 
