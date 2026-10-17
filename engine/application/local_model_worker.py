@@ -269,7 +269,7 @@ def execute_local_model_worker(
                 "steps",
                 "inference_steps",
             ),
-            default=8,
+            default=20,
             minimum=1,
             maximum=100,
         )
@@ -277,7 +277,7 @@ def execute_local_model_worker(
         width = _argument_integer(
             arguments,
             ("width",),
-            default=256,
+            default=384,
             minimum=64,
             maximum=1024,
         )
@@ -285,7 +285,7 @@ def execute_local_model_worker(
         height = _argument_integer(
             arguments,
             ("height",),
-            default=256,
+            default=384,
             minimum=64,
             maximum=1024,
         )
