@@ -1,0 +1,18 @@
+[Unit]
+Description=DataWorc QEMU Sandbox Guest Agent
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/dataworc/qemu-agent.py
+Restart=always
+RestartSec=1
+User=root
+Group=root
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

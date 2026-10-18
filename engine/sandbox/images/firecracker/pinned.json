@@ -1,0 +1,34 @@
+{
+  "architecture": "x86_64",
+  "artifacts": {
+    "ci_artifact_id": "20261008-40f3a4819490-0",
+    "kernel": {
+      "file": "vmlinux",
+      "sha256": "946e164b5a50675341a5d0a6ac2b516711806267ed0c73e17c6289c97aad81ea"
+    },
+    "kernel_version": "6.18.51",
+    "manifest_sha256": "3342f8831170b31ed847bdb00360a71fb512c2621e2891346c632be81277517a",
+    "rootfs": {
+      "file": "rootfs.ext4",
+      "sha256": "2f2cec7e3ab95e712cd6543418c51d46c8c24b05d5831d92434a8f809f84f64f"
+    },
+    "store": "~/.local/share/dataworc/sandbox/images/firecracker/20261008-40f3a4819490-0/x86_64",
+    "ubuntu_version": "24.04"
+  },
+  "firecracker": {
+    "path": "/usr/local/bin/firecracker",
+    "sha256": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "version": "1.17.0"
+  },
+  "jailer": {
+    "path": "/usr/local/bin/jailer",
+    "sha256": "65ef226e96f0ceda55ba643f445801ef2cc0ea667ef67cad8ac4f406c9c8434f",
+    "version": "1.17.0"
+  },
+  "pinned_at": "2026-10-13T07:07:53+00:00",
+  "release": {
+    "tarball_sha256": "06094a1108ae9e82aa4c23a775aa92758f53f1175d422270d9d6162cb9ade558",
+    "url": "https://github.com/firecracker-microvm/firecracker/releases/download/v1.17.0/firecracker-v1.17.0-x86_64.tgz"
+  },
+  "schema": "dataworc.sandbox.firecracker_pin.v1"
+}

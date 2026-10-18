@@ -91,3 +91,10 @@ data/model_training/
 data/*.json.lock
 data/model_outputs/
 var/
+
+# Sandbox VM images live outside Git (external image store / local only)
+engine/sandbox/images/**/*.qcow2
+engine/sandbox/images/**/*.ext4
+engine/sandbox/images/**/*.img
+engine/sandbox/images/**/*.squashfs
+engine/sandbox/images/**/vmlinux*
