@@ -36,12 +36,11 @@ def checked(root, path):
 
 
 def single_line(value, label):
-    if any(character in value for character in "\r\n"):
-        raise ValueError(f"{label} must be a single line")
-    value = value.strip()
-    if not value:
+    if not value.strip():
         raise ValueError(f"{label} must not be empty")
-    return value
+    if value.splitlines() != [value]:
+        raise ValueError(f"{label} must be a single line")
+    return value.strip()
 
 
 def read_metadata(path):
@@ -59,7 +58,12 @@ def read_metadata(path):
         key = key.strip()
         if not separator or not key or key in result:
             raise ValueError(f"{path}: invalid or repeated metadata key")
-        result[key] = json.loads(value.strip())
+        try:
+            result[key] = json.loads(value.strip())
+        except ValueError as error:
+            raise ValueError(
+                f"{path}: invalid value for {key!r}: {error}"
+            ) from None
     if set(result) != KEYS:
         raise ValueError(f"{path}: expected metadata keys {sorted(KEYS)}")
     if type(result["schema_version"]) is not int or result["schema_version"] != 1:
