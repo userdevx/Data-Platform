@@ -1238,3 +1238,14 @@
 .ask-panel [class*="capability"] {
   display: none !important;
 }
+
+/* Intelligence header: DataWorc replaces the page title; brand size = subtitle + 2px */
+.intelligence-header { --dw-subtitle-size: 15px; }
+.intelligence-header .page-subtitle { font-size: var(--dw-subtitle-size); }
+.intelligence-header h1.intelligence-brand {
+  margin: 0;
+  font-size: calc(var(--dw-subtitle-size) + 2px);
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  color: #1d4ed8;
+}

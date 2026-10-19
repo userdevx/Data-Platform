@@ -12,14 +12,10 @@ export default function IntelligenceHeader({
   statusLabel,
 }: IntelligenceHeaderProps) {
   return (
-    <section className="intelligence-header">
+    <section className="intelligence-header" aria-label={title}>
       <div>
-        <p className="eyebrow">
+        <h1 className="eyebrow intelligence-brand">
           {BRAND.product}
-        </p>
-
-        <h1>
-          {title}
         </h1>
 
         <p className="page-subtitle">
