@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
@@ -181,7 +182,7 @@ function SourcePage({ onBack, onNext }: SourcePageProps) {
 
         <header className="source-header">
           <h1>Choose Files</h1>
-          <p>Select files from your system and connect them to the Data Platform.</p>
+          <p>Select files from your system and connect them to {BRAND.product}.</p>
         </header>
 
         <section className="source-list">

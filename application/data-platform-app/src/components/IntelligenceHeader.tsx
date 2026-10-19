@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 export type IntelligenceHeaderProps = {
   title: string;
   runtimeStatus: string;
@@ -14,7 +15,7 @@ export default function IntelligenceHeader({
     <section className="intelligence-header">
       <div>
         <p className="eyebrow">
-          Data Platform
+          {BRAND.product}
         </p>
 
         <h1>

@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 type WelcomePageProps = {
   onConnectData: () => void;
 };
@@ -6,7 +7,7 @@ function WelcomePage({ onConnectData }: WelcomePageProps) {
   return (
     <main className="welcome-page">
       <section className="welcome-card welcome-start">
-        <h1>Welcome to the Data Platform</h1>
+        <h1>Welcome to {BRAND.product}</h1>
 
         <p>Connect your data into a single system.</p>
 

@@ -1,3 +1,4 @@
+import { BRAND } from "../config/brand";
 export type AppMode = "user" | "developer";
 
 export type UserModePage =
@@ -39,7 +40,7 @@ export const modeOptions: ModeOption[] = [
   {
     id: "user",
     label: "User Mode",
-    description: "Use the Data Platform."
+    description: `Use ${BRAND.product}.`
   },
   {
     id: "developer",
@@ -85,7 +86,7 @@ export const developerModeNavigation: DeveloperNavigationItem[] = [
   {
     id: "Terminal",
     label: "Command Terminal",
-    description: "Run commands, review output, and inspect the Data Platform."
+    description: `Run commands, review output, and inspect ${BRAND.product}.`
   },
   {
     id: "Git",

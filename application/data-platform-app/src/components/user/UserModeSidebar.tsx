@@ -1,3 +1,4 @@
+import { BRAND } from "../../config/brand";
 import "./UserModeSidebar.css";
 
 export type UserModePage = "Workspace" | "Data" | "Intelligence";
@@ -38,14 +39,14 @@ export default function UserModeSidebar({
   onPageChange
 }: UserModeSidebarProps) {
   return (
-    <aside className="user-sidebar" aria-label="Data Platform navigation">
+    <aside className="user-sidebar" aria-label={`${BRAND.product} navigation`}>
       <div className="user-sidebar-brand">
         <div className="user-sidebar-logo" aria-hidden="true">
           ▣
         </div>
 
         <div className="user-sidebar-title-block">
-          <strong>Data Platform</strong>
+          <strong>{BRAND.product}</strong>
           <span>Interactive workspace</span>
         </div>
       </div>

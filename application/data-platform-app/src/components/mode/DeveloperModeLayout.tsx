@@ -1,3 +1,4 @@
+import { BRAND } from "../../config/brand";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { DeveloperModePage } from "../../types/appModes";
@@ -107,7 +108,7 @@ const commandLibrary: CommandGroup[] = [
       {
         number: 2,
         command: "cd application/data-platform-app && npm run tauri dev",
-        summary: "Starts the Data Platform application.",
+        summary: `Starts the ${BRAND.product} application.`,
         detail: "Use this to open and test the application."
       },
       {
@@ -450,7 +451,7 @@ export default function DeveloperModeLayout({
           <div className="developer-terminal-top">
             <div>
               <h3>Command Terminal</h3>
-              <p>Use this workspace to run commands, review output, and inspect the Data Platform.</p>
+              <p>Use this workspace to run commands, review output, and inspect {BRAND.product}.</p>
             </div>
 
             <strong

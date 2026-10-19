@@ -1,3 +1,4 @@
+import { BRAND } from "../../config/brand";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
@@ -161,7 +162,7 @@ function WorkspacePage({
       <aside className="workspace-sidebar">
         <header className="workspace-brand">
           <div className="brand-icon">▣</div>
-          <strong>Data Platform</strong>
+          <strong>{BRAND.product}</strong>
         </header>
 
         <nav className="workspace-nav">

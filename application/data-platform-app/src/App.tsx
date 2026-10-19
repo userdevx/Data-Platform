@@ -1,3 +1,4 @@
+import { BRAND } from "./config/brand";
 import {
   useState,
 } from "react";
@@ -43,7 +44,7 @@ function App() {
     <main className="app-shell">
       <header className="app-utility-bar">
         <div className="app-utility-title">
-          Data Platform
+          {BRAND.product}
         </div>
 
         <div className="app-utility-actions">

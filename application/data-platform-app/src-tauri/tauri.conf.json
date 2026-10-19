@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Data Platform",
+  "productName": "DataWorc",
   "version": "0.1.0",
   "identifier": "com.device.data-platform-app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Data Platform",
+        "title": "DataWorc",
         "width": 1280,
         "height": 820,
         "minWidth": 1000,
@@ -30,7 +30,7 @@
     "targets": "all",
     "publisher": "Nigel Lawrence",
     "category": "DeveloperTool",
-    "shortDescription": "Data Platform Application Interface",
+    "shortDescription": "DataWorc desktop application",
     "longDescription": "A cross-platform Application Interface for monitoring ingestion, records, queries, validation, reports, health metrics, and engine activity.",
     "copyright": "Copyright \u00a9 2026 CCS Technologies",
     "windows": {
