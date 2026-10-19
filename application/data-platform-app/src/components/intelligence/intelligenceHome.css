@@ -1,0 +1,38 @@
+.dw-ask-hero {
+  background: var(--dw-blue-panel);
+  border-radius: var(--dw-radius-lg);
+  padding: 40px 32px;
+  display: flex;
+  justify-content: center;
+}
+.dw-ask-hero__inner { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 20px; }
+.dw-ask-hero__title { margin: 0; text-align: center; font-size: 28px; font-weight: 700; color: var(--dw-navy); }
+.dw-ask-hero__composer > * {
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-blue-edge);
+  border-radius: var(--dw-radius-md);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.14);
+}
+
+.dw-ideas { display: flex; flex-direction: column; gap: 14px; }
+.dw-ideas__title { margin: 0; font-size: 18px; font-weight: 700; color: var(--dw-navy); }
+.dw-ideas__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.dw-idea {
+  display: flex; gap: 14px; align-items: flex-start; padding: 18px; text-align: left;
+  border: 1px solid var(--dw-border); border-radius: var(--dw-radius-md);
+  background: var(--dw-surface); color: var(--dw-text); font: inherit; cursor: pointer;
+}
+.dw-idea:hover { border-color: var(--dw-blue-edge); }
+.dw-idea:focus-visible { outline: 2px solid var(--dw-blue); outline-offset: 2px; }
+.dw-idea__icon { flex: 0 0 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.dw-idea__icon--blue { background: #dbeafe; color: var(--dw-blue-strong); }
+.dw-idea__icon--teal { background: var(--dw-teal-soft); color: var(--dw-teal); }
+.dw-idea__icon--orange { background: var(--dw-orange-soft); color: var(--dw-orange); }
+.dw-idea__body { display: flex; flex-direction: column; gap: 4px; }
+.dw-idea__body strong { font-size: 15px; }
+.dw-idea__body span { font-size: 14px; line-height: 1.45; color: var(--dw-text-muted); }
+
+.dw-status-line { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--dw-text-muted); }
+.dw-status-line__dot { width: 8px; height: 8px; border-radius: 999px; background: var(--dw-green); }
+.dw-status-line__dot.is-busy { background: var(--dw-amber); }
+.dw-status-line__link { min-height: 44px; padding: 0 4px; border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--dw-blue-strong); text-decoration: underline; cursor: pointer; }

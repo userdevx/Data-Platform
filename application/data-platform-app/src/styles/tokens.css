@@ -1,0 +1,26 @@
+:root {
+  --dw-navy: #0b1f44;
+  --dw-navy-text: #cbd5e1;
+  --dw-blue: #2563eb;
+  --dw-blue-strong: #1d4ed8;
+  --dw-blue-soft: #eff6ff;
+  --dw-blue-panel: #dbe7fd;
+  --dw-blue-edge: #93b4f5;
+  --dw-bg: #f4f7fc;
+  --dw-surface: #ffffff;
+  --dw-border: #e2e8f0;
+  --dw-text: #0f172a;
+  --dw-text-muted: #475569;
+  --dw-teal: #0f766e;
+  --dw-teal-soft: #ccfbf1;
+  --dw-orange: #c2410c;
+  --dw-orange-soft: #ffedd5;
+  --dw-green: #16a34a;
+  --dw-green-soft: #dcfce7;
+  --dw-green-text: #166534;
+  --dw-amber: #d97706;
+  --dw-radius-sm: 10px;
+  --dw-radius-md: 14px;
+  --dw-radius-lg: 20px;
+  --dw-font: "Ubuntu", system-ui, "Segoe UI", sans-serif;
+}
