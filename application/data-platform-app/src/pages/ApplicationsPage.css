@@ -1,0 +1,988 @@
+.dw-build-page {
+  min-height:
+    100%;
+
+  box-sizing:
+    border-box;
+
+  padding:
+    48px
+    32px
+    56px;
+
+  background:
+    var(--dw-canvas);
+
+  color:
+    var(--dw-text);
+
+  font-family:
+    var(--dw-font);
+}
+
+
+.dw-build-page__content {
+  width:
+    min(
+      780px,
+      100%
+    );
+
+  margin:
+    0 auto;
+
+  text-align:
+    center;
+}
+
+
+.dw-build-page__header {
+  margin-bottom:
+    24px;
+}
+
+
+.dw-build-page__header h1 {
+  margin:
+    0;
+
+  color:
+    var(--dw-text);
+
+  font-size:
+    clamp(
+      24px,
+      2.1vw,
+      30px
+    );
+
+  font-weight:
+    700;
+
+  line-height:
+    1.2;
+
+  letter-spacing:
+    -0.03em;
+}
+
+
+.dw-build-page__header p {
+  margin:
+    10px
+    auto
+    0;
+
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    14px;
+
+  line-height:
+    1.5;
+}
+
+
+.dw-build-composer {
+  overflow:
+    hidden;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    14px;
+
+  background:
+    #ffffff;
+
+  box-shadow:
+    0
+    2px
+    8px
+    rgba(
+      15,
+      39,
+      80,
+      0.04
+    );
+
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+
+.dw-build-composer:focus-within {
+  border-color:
+    var(--dw-blue);
+
+  box-shadow:
+    0
+    0
+    0
+    3px
+    rgba(
+      47,
+      109,
+      246,
+      0.08
+    );
+}
+
+
+.dw-build-composer textarea {
+  display:
+    block;
+
+  width:
+    100%;
+
+  min-height:
+    142px;
+
+  box-sizing:
+    border-box;
+
+  padding:
+    18px;
+
+  resize:
+    vertical;
+
+  border:
+    0;
+
+  outline:
+    0;
+
+  background:
+    transparent;
+
+  color:
+    var(--dw-text);
+
+  font:
+    inherit;
+
+  font-size:
+    15px;
+
+  line-height:
+    1.5;
+}
+
+
+.dw-build-composer textarea::placeholder {
+  color:
+    var(--dw-text-muted);
+}
+
+
+.dw-build-composer__footer {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    12px;
+
+  min-height:
+    54px;
+
+  box-sizing:
+    border-box;
+
+  padding:
+    9px
+    12px;
+
+  border-top:
+    1px
+    solid
+    var(--dw-border);
+}
+
+
+.dw-build-composer__tools {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    8px;
+}
+
+
+.dw-build-icon-button {
+  width:
+    34px;
+
+  height:
+    34px;
+
+  display:
+    inline-grid;
+
+  place-items:
+    center;
+
+  padding:
+    0;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    9px;
+
+  background:
+    #ffffff;
+
+  color:
+    var(--dw-text-muted);
+}
+
+
+.dw-build-model {
+  min-width:
+    120px;
+
+  min-height:
+    34px;
+
+  padding:
+    0
+    30px
+    0
+    12px;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    9px;
+
+  background:
+    #f7f9fc;
+
+  color:
+    var(--dw-text);
+
+  font:
+    inherit;
+
+  font-size:
+    13px;
+}
+
+
+.dw-build-button {
+  min-width:
+    78px;
+
+  min-height:
+    34px;
+
+  padding:
+    0
+    17px;
+
+  border:
+    0;
+
+  border-radius:
+    9px;
+
+  background:
+    var(--dw-blue);
+
+  color:
+    #ffffff;
+
+  font:
+    inherit;
+
+  font-size:
+    13px;
+
+  font-weight:
+    600;
+}
+
+
+.dw-build-button:disabled,
+.dw-build-icon-button:disabled,
+.dw-build-model:disabled {
+  cursor:
+    not-allowed;
+
+  opacity:
+    0.52;
+}
+
+
+.dw-build-types {
+  display:
+    flex;
+
+  flex-wrap:
+    wrap;
+
+  justify-content:
+    center;
+
+  gap:
+    8px;
+
+  margin-top:
+    22px;
+}
+
+
+.dw-build-type {
+  min-height:
+    32px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  gap:
+    7px;
+
+  padding:
+    0
+    13px;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    999px;
+
+  background:
+    #ffffff;
+
+  color:
+    var(--dw-text);
+
+  font:
+    inherit;
+
+  font-size:
+    13px;
+
+  cursor:
+    pointer;
+
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+
+.dw-build-type:hover {
+  border-color:
+    var(--dw-blue);
+
+  color:
+    var(--dw-blue-strong);
+}
+
+
+.dw-build-type:active {
+  transform:
+    translateY(1px);
+}
+
+
+.dw-build-type.is-active {
+  border-color:
+    var(--dw-blue);
+
+  background:
+    var(--dw-blue-soft);
+
+  color:
+    var(--dw-blue-strong);
+}
+
+
+.dw-build-examples {
+  margin-top:
+    28px;
+}
+
+
+.dw-build-examples > p {
+  margin:
+    0
+    0
+    10px;
+
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    13px;
+}
+
+
+.dw-build-examples__items {
+  display:
+    flex;
+
+  flex-wrap:
+    wrap;
+
+  justify-content:
+    center;
+
+  gap:
+    8px;
+}
+
+
+.dw-build-examples__items button {
+  min-height:
+    32px;
+
+  padding:
+    0
+    13px;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    999px;
+
+  background:
+    #ffffff;
+
+  color:
+    var(--dw-text);
+
+  font:
+    inherit;
+
+  font-size:
+    13px;
+
+  cursor:
+    pointer;
+
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+
+.dw-build-examples__items button:hover {
+  border-color:
+    #bdcae0;
+
+  box-shadow:
+    0
+    3px
+    10px
+    rgba(
+      15,
+      39,
+      80,
+      0.05
+    );
+}
+
+
+.dw-build-examples__items button:active {
+  transform:
+    translateY(1px);
+}
+
+
+.dw-build-runtime-note {
+  margin:
+    18px
+    auto
+    0;
+
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    11px;
+
+  line-height:
+    1.45;
+}
+
+
+@media (max-width: 720px) {
+  .dw-build-page {
+    padding:
+      28px
+      14px
+      42px;
+  }
+
+
+  .dw-build-page__header h1 {
+    font-size:
+      24px;
+  }
+
+
+  .dw-build-composer textarea {
+    min-height:
+      126px;
+  }
+
+
+  .dw-build-composer__footer {
+    align-items:
+      stretch;
+
+    flex-direction:
+      column;
+  }
+
+
+  .dw-build-composer__tools {
+    width:
+      100%;
+  }
+
+
+  .dw-build-model {
+    flex:
+      1;
+  }
+
+
+  .dw-build-button {
+    width:
+      100%;
+  }
+
+
+  .dw-build-types,
+  .dw-build-examples__items {
+    justify-content:
+      flex-start;
+  }
+}
+
+
+/* DATAWORC_APPLICATION_GENERATION_RESULT */
+
+.dw-build-result {
+  margin:
+    24px
+    auto
+    0;
+
+  padding:
+    16px
+    18px;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    18px;
+
+  border:
+    1px
+    solid
+    #cfe0ff;
+
+  border-radius:
+    14px;
+
+  background:
+    #ffffff;
+
+  text-align:
+    left;
+
+  box-shadow:
+    0
+    8px
+    24px
+    rgba(
+      15,
+      39,
+      80,
+      0.05
+    );
+}
+
+
+.dw-build-result--error {
+  border-color:
+    #f1c4c4;
+
+  background:
+    #fff8f8;
+}
+
+
+.dw-build-result__copy {
+  min-width:
+    0;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    5px;
+}
+
+
+.dw-build-result__copy p {
+  margin:
+    0;
+}
+
+
+.dw-build-result__copy code {
+  overflow:
+    hidden;
+
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    11px;
+
+  text-overflow:
+    ellipsis;
+
+  white-space:
+    nowrap;
+}
+
+
+.dw-build-result__copy span {
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    11px;
+}
+
+
+.dw-build-open-button {
+  flex:
+    0
+    0
+    auto;
+
+  min-height:
+    34px;
+
+  padding:
+    0
+    14px;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    9px;
+
+  background:
+    #ffffff;
+
+  color:
+    var(--dw-text);
+
+  font:
+    inherit;
+
+  font-size:
+    12px;
+
+  font-weight:
+    600;
+
+  cursor:
+    pointer;
+}
+
+
+.dw-build-open-button:hover {
+  border-color:
+    var(--dw-blue);
+
+  color:
+    var(--dw-blue-strong);
+}
+
+
+@media (max-width: 720px) {
+  .dw-build-result {
+    align-items:
+      stretch;
+
+    flex-direction:
+      column;
+  }
+
+
+  .dw-build-open-button {
+    width:
+      100%;
+  }
+}
+
+
+/* DATAWORC_BUILD_PIPELINE */
+
+.dw-build-pipeline {
+  margin:
+    24px
+    auto
+    0;
+
+  overflow:
+    hidden;
+
+  border:
+    1px
+    solid
+    var(--dw-border);
+
+  border-radius:
+    14px;
+
+  background:
+    #ffffff;
+
+  text-align:
+    left;
+
+  box-shadow:
+    0
+    8px
+    24px
+    rgba(
+      15,
+      39,
+      80,
+      0.04
+    );
+}
+
+
+.dw-build-pipeline__header {
+  min-height:
+    48px;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    12px;
+
+  padding:
+    0
+    16px;
+
+  border-bottom:
+    1px
+    solid
+    var(--dw-border);
+}
+
+
+.dw-build-pipeline__header strong {
+  color:
+    var(--dw-text);
+
+  font-size:
+    13px;
+}
+
+
+.dw-build-pipeline__header span {
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    11px;
+}
+
+
+.dw-build-pipeline__steps {
+  display:
+    flex;
+
+  flex-direction:
+    column;
+}
+
+
+.dw-build-phase {
+  display:
+    grid;
+
+  grid-template-columns:
+    24px
+    1fr;
+
+  gap:
+    9px;
+
+  padding:
+    12px
+    16px;
+
+  border-bottom:
+    1px
+    solid
+    var(--dw-border);
+}
+
+
+.dw-build-phase:last-child {
+  border-bottom:
+    0;
+}
+
+
+.dw-build-phase__indicator {
+  width:
+    20px;
+
+  height:
+    20px;
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+  border-radius:
+    999px;
+
+  background:
+    #f1f5fb;
+
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    11px;
+
+  font-weight:
+    700;
+}
+
+
+.dw-build-phase strong {
+  display:
+    block;
+
+  color:
+    var(--dw-text);
+
+  font-size:
+    12px;
+}
+
+
+.dw-build-phase p {
+  margin:
+    3px
+    0
+    0;
+
+  color:
+    var(--dw-text-muted);
+
+  font-size:
+    11px;
+
+  line-height:
+    1.4;
+}
+
+
+.dw-build-phase.is-success
+.dw-build-phase__indicator {
+  background:
+    #eaf8ef;
+
+  color:
+    #15803d;
+}
+
+
+.dw-build-phase.is-error
+.dw-build-phase__indicator {
+  background:
+    #fff0f0;
+
+  color:
+    #c62828;
+}
+
+
+.dw-build-phase.is-running
+.dw-build-phase__indicator {
+  background:
+    var(--dw-blue-soft);
+
+  color:
+    var(--dw-blue);
+}
+
+
+.dw-build-phase.is-pending {
+  opacity:
+    0.72;
+}

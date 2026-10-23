@@ -1,0 +1,95 @@
+.dw-composer {
+  background: var(--canvas);
+  border: 1px solid var(--hairline-input);
+  border-radius: var(--dw-radius-md);
+  box-shadow: var(--elevation-2);
+  padding: 12px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+.dw-composer:focus-within { border-color: var(--primary); }
+.dw-composer__input {
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  min-height: 72px;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.dw-composer__input::placeholder { color: var(--ink-mute); }
+.dw-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dw-composer__tools { display: flex; align-items: center; gap: 8px; }
+
+.dw-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--dw-radius-pill);
+  background: var(--canvas);
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+.dw-icon-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+.dw-select {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--dw-radius-pill);
+  background: var(--canvas-soft);
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.dw-btn-primary,
+.dw-btn-secondary {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--dw-radius-pill);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.dw-btn-primary { border: 0; background: var(--primary); color: var(--on-primary); }
+.dw-btn-primary:active { background: var(--primary-press); }
+.dw-btn-primary:disabled { opacity: 0.45; cursor: default; }
+.dw-btn-secondary { border: 1px solid var(--primary); background: var(--canvas); color: var(--primary); }
+
+.dw-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.dw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--dw-radius-pill);
+  background: var(--canvas-soft);
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.dw-chip button.dw-chip__remove {
+  min-height: 0;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--dw-radius-pill);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dw-chip button.dw-chip__remove:hover { background: var(--hairline); }
+
+.dw-composer__error { margin: 0; font-size: 13px; color: #b91c1c; }

@@ -6,9 +6,11 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import IntelligenceHeader from "../components/IntelligenceHeader";
-import IntelligenceAskPanel from "../components/IntelligenceAskPanel";
+import IntelligenceComposer from "../components/intelligence/IntelligenceComposer";
 import IntelligenceResponsePanel from "../components/IntelligenceResponsePanel";
-import IntelligenceOutputPanel from "../components/IntelligenceOutputPanel";
+import AskHero from "../components/intelligence/AskHero";
+import SystemStatusLine from "../components/intelligence/SystemStatusLine";
+import StartIdeas from "../components/intelligence/StartIdeas";
 
 
 import {
@@ -106,7 +108,16 @@ function getErrorMessage(
   return "The request could not be completed.";
 }
 
-export default function ButtonInterfacePage() {
+export type ButtonInterfacePageProps = {
+  onOpenApplications: () => void;
+  onOpenData: () => void;
+};
+
+
+export default function ButtonInterfacePage({
+  onOpenApplications,
+  onOpenData,
+}: ButtonInterfacePageProps) {
   const [
     requestText,
     setRequestText,
@@ -130,7 +141,7 @@ export default function ButtonInterfacePage() {
   ] = useState("");
 
   const [
-    displayName,
+    ,
     setDisplayName,
   ] = useState(
     intelligenceConfig.fallbackDisplayName,
@@ -509,10 +520,6 @@ export default function ButtonInterfacePage() {
     setRuntimeStatus("ready");
   }
 
-  function handleClearLog(): void {
-    setLogs([]);
-  }
-
   return (
     <main className="intelligence-page">
       <IntelligenceHeader
@@ -529,39 +536,19 @@ export default function ButtonInterfacePage() {
         }
       />
 
-      <section className="main-grid">
-        <IntelligenceAskPanel
-          displayName={displayName}
+      <AskHero>
+        <IntelligenceComposer
           modelOptions={modelOptions}
           modelsLoading={modelsLoading}
-          selectedModelId={
-            selectedModelId
-          }
-          selectedModel={
-            selectedModel
-          }
-          requestText={
-            requestText
-          }
-          attachmentPaths={
-            attachmentPaths
-          }
-          runtimeStatus={
-            runtimeStatus
-          }
-          errorMessage={
-            errorMessage
-          }
-          onModelChange={
-            setSelectedModelId
-          }
-          onRequestChange={
-            setRequestText
-          }
-          onAttachmentChange={
-            setAttachmentPaths
-          }
-          onAsk={() => {
+          selectedModelId={selectedModelId}
+          requestText={requestText}
+          attachmentPaths={attachmentPaths}
+          busy={runtimeStatus === "thinking"}
+          errorMessage={errorMessage}
+          onModelChange={setSelectedModelId}
+          onRequestChange={setRequestText}
+          onAttachmentChange={setAttachmentPaths}
+          onSend={() => {
             void handleAsk();
           }}
           onCancel={() => {
@@ -569,18 +556,33 @@ export default function ButtonInterfacePage() {
           }}
         />
 
+      </AskHero>
+
+        <StartIdeas
+          onAsk={() => {
+            document
+              .querySelector<HTMLTextAreaElement>(
+                ".dw-composer__input",
+              )
+              ?.focus();
+          }}
+          onConnect={onOpenData}
+          onBuild={onOpenApplications}
+        />
+
+      {response || runtimeStatus === "thinking" ? (
         <IntelligenceResponsePanel
           response={response}
-          onOpenUrl={
-            openExternalUrl
-          }
+          onOpenUrl={openExternalUrl}
         />
-      </section>
+      ) : null}
 
-      <IntelligenceOutputPanel
-        logs={logs}
-        onClear={
-          handleClearLog
+      <SystemStatusLine
+        ready={runtimeStatus === "ready" || runtimeStatus === "success"}
+        items={
+          logs.length > 0
+            ? logs.slice(0, 2).map((log) => log.message)
+            : [getDisplayStatus(runtimeStatus)]
         }
       />
     </main>

@@ -45,8 +45,6 @@ impl Drop for RequestGuard {
     }
 }
 
-
-
 fn application_root() -> Result<PathBuf, String> {
     for variable in ["DATA_PLATFORM_ROOT", "APPLICATION_ROOT"] {
         if let Ok(value) = std::env::var(variable) {
@@ -107,53 +105,36 @@ fn python_binary(root: &Path) -> PathBuf {
     }
 }
 
-fn cancel_generation_for_request(
-    root: &Path,
-    request_id: &str,
-) -> Result<(), String> {
-    let clean_request_id =
-        request_id.trim();
+fn cancel_generation_for_request(root: &Path, request_id: &str) -> Result<(), String> {
+    let clean_request_id = request_id.trim();
 
     if clean_request_id.is_empty() {
-        return Err(
-            "A request ID is required for cancellation."
-                .to_string(),
-        );
+        return Err("A request ID is required for cancellation.".to_string());
     }
 
-    let status = Command::new(
-        python_binary(root)
-    )
-    .current_dir(root)
-    .env("PYTHONPATH", root)
-    .env("PYTHONUNBUFFERED", "1")
-    .arg("-m")
-    .arg(MODEL_BRIDGE_MODULE)
-    .arg("cancel-generation")
-    .arg("--request-id")
-    .arg(clean_request_id)
-    .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .status()
-    .map_err(|error| {
-        format!(
-            "Could not start GenerationJob cancellation: {}",
-            error
-        )
-    })?;
+    let status = Command::new(python_binary(root))
+        .current_dir(root)
+        .env("PYTHONPATH", root)
+        .env("PYTHONUNBUFFERED", "1")
+        .arg("-m")
+        .arg(MODEL_BRIDGE_MODULE)
+        .arg("cancel-generation")
+        .arg("--request-id")
+        .arg(clean_request_id)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| format!("Could not start GenerationJob cancellation: {}", error))?;
 
     if !status.success() {
-        return Err(
-            format!(
-                "GenerationJob cancellation failed with status {}.",
-                status
-            )
-        );
+        return Err(format!(
+            "GenerationJob cancellation failed with status {}.",
+            status
+        ));
     }
 
     Ok(())
 }
-
 
 fn read_environment_u64(name: &str, default_value: u64) -> u64 {
     std::env::var(name)
@@ -397,9 +378,7 @@ pub async fn process_manual_model_request(
         "MODEL_REQUEST_TIMEOUT_SECONDS",
         DEFAULT_REQUEST_TIMEOUT_SECONDS,
     )
-    .max(
-        GENERATION_SAFE_REQUEST_TIMEOUT_SECONDS
-    );
+    .max(GENERATION_SAFE_REQUEST_TIMEOUT_SECONDS);
 
     let result = tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
@@ -429,48 +408,26 @@ pub async fn process_manual_model_request(
 }
 
 #[tauri::command]
-pub fn cancel_manual_model_request(
-    request_id: String,
-) -> Result<String, String> {
-    let root =
-        application_root()?;
+pub fn cancel_manual_model_request(request_id: String) -> Result<String, String> {
+    let root = application_root()?;
 
-    cancel_generation_for_request(
-        &root,
-        &request_id,
-    )?;
+    cancel_generation_for_request(&root, &request_id)?;
 
-    if !REQUEST_RUNNING.load(
-        Ordering::SeqCst
-    ) {
-        return Ok(
-            "Generation cancellation was requested."
-                .to_string()
-        );
+    if !REQUEST_RUNNING.load(Ordering::SeqCst) {
+        return Ok("Generation cancellation was requested.".to_string());
     }
 
-    CANCEL_REQUESTED.store(
-        true,
-        Ordering::SeqCst,
-    );
+    CANCEL_REQUESTED.store(true, Ordering::SeqCst);
 
     let active = active_child()
         .lock()
-        .map_err(
-            |_| "The active worker lock is unavailable."
-                .to_string()
-        )?
+        .map_err(|_| "The active worker lock is unavailable.".to_string())?
         .as_ref()
         .cloned();
 
     if let Some(child) = active {
-        terminate_child(
-            &child
-        );
+        terminate_child(&child);
     }
 
-    Ok(
-        "Cancellation was requested."
-            .to_string()
-    )
+    Ok("Cancellation was requested.".to_string())
 }

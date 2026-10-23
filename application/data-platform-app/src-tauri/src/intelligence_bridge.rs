@@ -17,21 +17,13 @@ const PROCESS_POLL_INTERVAL_MILLISECONDS: u64 = 50;
 
 static AUTOMATIC_REQUEST_RUNNING: AtomicBool = AtomicBool::new(false);
 
-static AUTOMATIC_CANCEL_REQUESTED: AtomicBool =
-    AtomicBool::new(false);
+static AUTOMATIC_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-static AUTOMATIC_ACTIVE_CHILD:
-    OnceLock<Mutex<Option<Arc<Mutex<Child>>>>> =
-    OnceLock::new();
+static AUTOMATIC_ACTIVE_CHILD: OnceLock<Mutex<Option<Arc<Mutex<Child>>>>> = OnceLock::new();
 
-
-fn automatic_active_child(
-) -> &'static Mutex<Option<Arc<Mutex<Child>>>> {
-    AUTOMATIC_ACTIVE_CHILD.get_or_init(
-        || Mutex::new(None)
-    )
+fn automatic_active_child() -> &'static Mutex<Option<Arc<Mutex<Child>>>> {
+    AUTOMATIC_ACTIVE_CHILD.get_or_init(|| Mutex::new(None))
 }
-
 
 struct AutomaticRequestGuard;
 
@@ -41,10 +33,7 @@ impl AutomaticRequestGuard {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| "An Automatic intelligence request is already running.".to_string())?;
 
-        AUTOMATIC_CANCEL_REQUESTED.store(
-            false,
-            Ordering::SeqCst,
-        );
+        AUTOMATIC_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
 
         Ok(Self)
     }
@@ -52,19 +41,11 @@ impl AutomaticRequestGuard {
 
 impl Drop for AutomaticRequestGuard {
     fn drop(&mut self) {
-        AUTOMATIC_REQUEST_RUNNING.store(
-            false,
-            Ordering::SeqCst,
-        );
+        AUTOMATIC_REQUEST_RUNNING.store(false, Ordering::SeqCst);
 
-        AUTOMATIC_CANCEL_REQUESTED.store(
-            false,
-            Ordering::SeqCst,
-        );
+        AUTOMATIC_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
     }
 }
-
-
 
 fn application_root() -> Result<PathBuf, String> {
     for variable in ["DATA_PLATFORM_ROOT", "APPLICATION_ROOT"] {
@@ -103,10 +84,7 @@ fn application_root() -> Result<PathBuf, String> {
         }
     }
 
-    Err(
-        "Application root was not found. Set DATA_PLATFORM_ROOT or APPLICATION_ROOT."
-            .to_string(),
-    )
+    Err("Application root was not found. Set DATA_PLATFORM_ROOT or APPLICATION_ROOT.".to_string())
 }
 
 fn application_root_is_valid(root: &Path) -> bool {
@@ -132,55 +110,36 @@ fn python_binary(root: &Path) -> PathBuf {
     PathBuf::from("python3")
 }
 
-fn cancel_generation_for_request(
-    root: &Path,
-    request_id: &str,
-) -> Result<(), String> {
-    let clean_request_id =
-        request_id.trim();
+fn cancel_generation_for_request(root: &Path, request_id: &str) -> Result<(), String> {
+    let clean_request_id = request_id.trim();
 
     if clean_request_id.is_empty() {
-        return Err(
-            "A request ID is required for cancellation."
-                .to_string(),
-        );
+        return Err("A request ID is required for cancellation.".to_string());
     }
 
-    let status = Command::new(
-        python_binary(root)
-    )
-    .current_dir(root)
-    .env("PYTHONPATH", root)
-    .env("PYTHONUNBUFFERED", "1")
-    .arg("-m")
-    .arg(
-        "engine.application.tauri_model_bridge"
-    )
-    .arg("cancel-generation")
-    .arg("--request-id")
-    .arg(clean_request_id)
-    .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .status()
-    .map_err(|error| {
-        format!(
-            "Could not start GenerationJob cancellation: {}",
-            error
-        )
-    })?;
+    let status = Command::new(python_binary(root))
+        .current_dir(root)
+        .env("PYTHONPATH", root)
+        .env("PYTHONUNBUFFERED", "1")
+        .arg("-m")
+        .arg("engine.application.tauri_model_bridge")
+        .arg("cancel-generation")
+        .arg("--request-id")
+        .arg(clean_request_id)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| format!("Could not start GenerationJob cancellation: {}", error))?;
 
     if !status.success() {
-        return Err(
-            format!(
-                "GenerationJob cancellation failed with status {}.",
-                status
-            )
-        );
+        return Err(format!(
+            "GenerationJob cancellation failed with status {}.",
+            status
+        ));
     }
 
     Ok(())
 }
-
 
 fn request_timeout() -> Duration {
     let seconds = std::env::var("INTELLIGENCE_REQUEST_TIMEOUT_SECONDS")
@@ -188,9 +147,7 @@ fn request_timeout() -> Duration {
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
         .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECONDS)
-        .max(
-            GENERATION_SAFE_REQUEST_TIMEOUT_SECONDS
-        );
+        .max(GENERATION_SAFE_REQUEST_TIMEOUT_SECONDS);
 
     Duration::from_secs(seconds)
 }
@@ -246,39 +203,21 @@ fn join_stream_reader(
     })?
 }
 
-fn store_automatic_child(
-    child: Arc<Mutex<Child>>,
-) -> Result<(), String> {
-    let mut active =
-        automatic_active_child()
-            .lock()
-            .map_err(
-                |_| (
-                    "The automatic worker state lock is unavailable."
-                ).to_string()
-            )?;
+fn store_automatic_child(child: Arc<Mutex<Child>>) -> Result<(), String> {
+    let mut active = automatic_active_child()
+        .lock()
+        .map_err(|_| ("The automatic worker state lock is unavailable.").to_string())?;
 
     *active = Some(child);
 
     Ok(())
 }
 
-
-fn clear_automatic_child(
-    child: &Arc<Mutex<Child>>,
-) {
-    if let Ok(mut active) =
-        automatic_active_child().lock()
-    {
+fn clear_automatic_child(child: &Arc<Mutex<Child>>) {
+    if let Ok(mut active) = automatic_active_child().lock() {
         let should_clear = active
             .as_ref()
-            .map(
-                |current|
-                    Arc::ptr_eq(
-                        current,
-                        child,
-                    )
-            )
+            .map(|current| Arc::ptr_eq(current, child))
             .unwrap_or(false);
 
         if should_clear {
@@ -287,55 +226,34 @@ fn clear_automatic_child(
     }
 }
 
-
-fn terminate_automatic_child(
-    child: &Arc<Mutex<Child>>,
-) {
-    if let Ok(mut process) =
-        child.lock()
-    {
+fn terminate_automatic_child(child: &Arc<Mutex<Child>>) {
+    if let Ok(mut process) = child.lock() {
         let _ = process.kill();
         let _ = process.wait();
     }
 }
 
-
-fn wait_for_process(
-    child: &Arc<Mutex<Child>>,
-    timeout: Duration,
-) -> Result<ExitStatus, String> {
+fn wait_for_process(child: &Arc<Mutex<Child>>, timeout: Duration) -> Result<ExitStatus, String> {
     let started_at = Instant::now();
 
     loop {
-        if AUTOMATIC_CANCEL_REQUESTED.load(
-            Ordering::SeqCst,
-        ) {
-            terminate_automatic_child(
-                child
-            );
+        if AUTOMATIC_CANCEL_REQUESTED.load(Ordering::SeqCst) {
+            terminate_automatic_child(child);
 
-            return Err(
-                "The request was cancelled."
-                    .to_string()
-            );
+            return Err("The request was cancelled.".to_string());
         }
 
         let status = {
-            let mut process =
-                child.lock().map_err(
-                    |_| (
-                        "The Intelligence Runtime process lock is unavailable."
-                    ).to_string()
-                )?;
+            let mut process = child.lock().map_err(|_| {
+                ("The Intelligence Runtime process lock is unavailable.").to_string()
+            })?;
 
-            process.try_wait().map_err(
-                |error| {
-                    format!(
-                        "Could not read Intelligence Runtime process status: {}",
-                        error
-                    )
-                }
-            )?
+            process.try_wait().map_err(|error| {
+                format!(
+                    "Could not read Intelligence Runtime process status: {}",
+                    error
+                )
+            })?
         };
 
         if let Some(exit_status) = status {
@@ -343,23 +261,15 @@ fn wait_for_process(
         }
 
         if started_at.elapsed() >= timeout {
-            terminate_automatic_child(
-                child
-            );
+            terminate_automatic_child(child);
 
-            return Err(
-                format!(
-                    "Intelligence Runtime exceeded its {} second timeout and was terminated.",
-                    timeout.as_secs()
-                )
-            );
+            return Err(format!(
+                "Intelligence Runtime exceeded its {} second timeout and was terminated.",
+                timeout.as_secs()
+            ));
         }
 
-        thread::sleep(
-            Duration::from_millis(
-                PROCESS_POLL_INTERVAL_MILLISECONDS
-            )
-        );
+        thread::sleep(Duration::from_millis(PROCESS_POLL_INTERVAL_MILLISECONDS));
     }
 }
 
@@ -406,18 +316,13 @@ fn run_intelligence_request(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
     {
-        command
-            .arg("--conversation-id")
-            .arg(conversation_id);
+        command.arg("--conversation-id").arg(conversation_id);
     }
 
-    let clean_request_id =
-        request_id.trim().to_string();
+    let clean_request_id = request_id.trim().to_string();
 
     if !clean_request_id.is_empty() {
-        command
-            .arg("--request-id")
-            .arg(clean_request_id);
+        command.arg("--request-id").arg(clean_request_id);
     }
 
     let mut child = command
@@ -445,26 +350,13 @@ fn run_intelligence_request(
 
     let stderr_reader = thread::spawn(move || read_bounded_stream(stderr, output_limit, "stderr"));
 
-    let shared_child =
-        Arc::new(
-            Mutex::new(child)
-        );
+    let shared_child = Arc::new(Mutex::new(child));
 
-    store_automatic_child(
-        Arc::clone(
-            &shared_child
-        )
-    )?;
+    store_automatic_child(Arc::clone(&shared_child))?;
 
-    let process_result =
-        wait_for_process(
-            &shared_child,
-            timeout,
-        );
+    let process_result = wait_for_process(&shared_child, timeout);
 
-    clear_automatic_child(
-        &shared_child
-    );
+    clear_automatic_child(&shared_child);
 
     let stdout_result = join_stream_reader(stdout_reader, "stdout");
 
@@ -532,57 +424,32 @@ pub async fn process_intelligence_request(
     tauri::async_runtime::spawn_blocking(move || {
         let _request_guard = request_guard;
 
-        run_intelligence_request(
-            question,
-            definition,
-            conversation_id,
-            request_id,
-        )
+        run_intelligence_request(question, definition, conversation_id, request_id)
     })
     .await
     .map_err(|error| format!("The Automatic intelligence worker task failed: {}", error))?
 }
 
 #[tauri::command]
-pub fn cancel_intelligence_request(
-    request_id: String,
-) -> Result<String, String> {
-    let root =
-        application_root()?;
+pub fn cancel_intelligence_request(request_id: String) -> Result<String, String> {
+    let root = application_root()?;
 
-    cancel_generation_for_request(
-        &root,
-        &request_id,
-    )?;
+    cancel_generation_for_request(&root, &request_id)?;
 
-    AUTOMATIC_CANCEL_REQUESTED.store(
-        true,
-        Ordering::SeqCst,
-    );
+    AUTOMATIC_CANCEL_REQUESTED.store(true, Ordering::SeqCst);
 
-    let active =
-        automatic_active_child()
-            .lock()
-            .map_err(
-                |_| (
-                    "The automatic worker lock is unavailable."
-                ).to_string()
-            )?
-            .as_ref()
-            .cloned();
+    let active = automatic_active_child()
+        .lock()
+        .map_err(|_| ("The automatic worker lock is unavailable.").to_string())?
+        .as_ref()
+        .cloned();
 
     if let Some(child) = active {
-        terminate_automatic_child(
-            &child
-        );
+        terminate_automatic_child(&child);
     }
 
-    Ok(
-        "Cancellation was requested."
-            .to_string()
-    )
+    Ok("Cancellation was requested.".to_string())
 }
-
 
 #[tauri::command]
 pub async fn update_memory_settings(
@@ -595,8 +462,7 @@ pub async fn update_memory_settings(
     tauri::async_runtime::spawn_blocking(move || {
         let root = application_root()?;
 
-        let definition_path = definition
-            .unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
+        let definition_path = definition.unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
 
         let path = root.join(&definition_path);
 
@@ -609,87 +475,50 @@ pub async fn update_memory_settings(
 
         let canonical_root = root
             .canonicalize()
-            .map_err(|error| {
-                format!(
-                    "Could not resolve the application root: {}",
-                    error
-                )
-            })?;
+            .map_err(|error| format!("Could not resolve the application root: {}", error))?;
 
         let canonical_path = path
             .canonicalize()
-            .map_err(|error| {
-                format!(
-                    "Could not resolve the Intelligence Definition: {}",
-                    error
-                )
-            })?;
+            .map_err(|error| format!("Could not resolve the Intelligence Definition: {}", error))?;
 
         if !canonical_path.starts_with(&canonical_root) {
             return Err(
-                "The Intelligence Definition must be inside the application root."
-                    .to_string()
+                "The Intelligence Definition must be inside the application root.".to_string(),
             );
         }
 
         let raw = std::fs::read_to_string(&canonical_path)
-            .map_err(|error| {
+            .map_err(|error| format!("Could not read the Intelligence Definition: {}", error))?;
+
+        let mut definition_value: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|error| {
                 format!(
-                    "Could not read the Intelligence Definition: {}",
+                    "The Intelligence Definition contains invalid JSON: {}",
                     error
                 )
             })?;
 
-        let mut definition_value:
-            serde_json::Value =
-            serde_json::from_str(&raw)
-                .map_err(|error| {
-                    format!(
-                        "The Intelligence Definition contains invalid JSON: {}",
-                        error
-                    )
-                })?;
-
         let root_object = definition_value
             .as_object_mut()
-            .ok_or_else(|| {
-                "The Intelligence Definition must be a JSON object."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The Intelligence Definition must be a JSON object.".to_string())?;
 
         let memory_value = root_object
             .entry("memory")
-            .or_insert_with(|| {
-                serde_json::json!({})
-            });
+            .or_insert_with(|| serde_json::json!({}));
 
         let memory = memory_value
             .as_object_mut()
-            .ok_or_else(|| {
-                "The memory configuration must be a JSON object."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The memory configuration must be a JSON object.".to_string())?;
 
-        memory.insert(
-            "enabled".to_string(),
-            serde_json::Value::Bool(enabled),
-        );
+        memory.insert("enabled".to_string(), serde_json::Value::Bool(enabled));
 
-        memory.insert(
-            "read".to_string(),
-            serde_json::Value::Bool(read),
-        );
+        memory.insert("read".to_string(), serde_json::Value::Bool(read));
 
-        memory.insert(
-            "write".to_string(),
-            serde_json::Value::Bool(write),
-        );
+        memory.insert("write".to_string(), serde_json::Value::Bool(write));
 
         memory.insert(
             "automatic_recall".to_string(),
-            serde_json::Value::Bool(
-                automatic_recall,
-            ),
+            serde_json::Value::Bool(automatic_recall),
         );
 
         /*
@@ -698,58 +527,30 @@ pub async fn update_memory_settings(
          * Only the behavior controls above are changed.
          */
 
-        let formatted =
-            serde_json::to_string_pretty(
-                &definition_value
-            )
-            .map_err(|error| {
-                format!(
-                    "Could not serialize the Intelligence Definition: {}",
-                    error
-                )
-            })?;
+        let formatted = serde_json::to_string_pretty(&definition_value).map_err(|error| {
+            format!("Could not serialize the Intelligence Definition: {}", error)
+        })?;
 
         let parent = canonical_path
             .parent()
-            .ok_or_else(|| {
-                "The Intelligence Definition has no parent directory."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The Intelligence Definition has no parent directory.".to_string())?;
 
         let file_name = canonical_path
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| {
-                "The Intelligence Definition filename is invalid."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The Intelligence Definition filename is invalid.".to_string())?;
 
-        let temporary_path = parent.join(
-            format!(
-                ".{}.memory-update.tmp",
-                file_name
-            )
-        );
+        let temporary_path = parent.join(format!(".{}.memory-update.tmp", file_name));
 
-        std::fs::write(
-            &temporary_path,
-            format!("{}\n", formatted),
-        )
-        .map_err(|error| {
+        std::fs::write(&temporary_path, format!("{}\n", formatted)).map_err(|error| {
             format!(
                 "Could not write the temporary Intelligence Definition: {}",
                 error
             )
         })?;
 
-        std::fs::rename(
-            &temporary_path,
-            &canonical_path,
-        )
-        .map_err(|error| {
-            let _ = std::fs::remove_file(
-                &temporary_path
-            );
+        std::fs::rename(&temporary_path, &canonical_path).map_err(|error| {
+            let _ = std::fs::remove_file(&temporary_path);
 
             format!(
                 "Could not activate the updated Intelligence Definition: {}",
@@ -757,29 +558,21 @@ pub async fn update_memory_settings(
             )
         })?;
 
-        Ok(
-            serde_json::json!({
-                "status": "success",
-                "memory": {
-                    "enabled": enabled,
-                    "read": read,
-                    "write": write,
-                    "automatic_recall":
-                        automatic_recall,
-                }
-            })
-            .to_string()
-        )
+        Ok(serde_json::json!({
+            "status": "success",
+            "memory": {
+                "enabled": enabled,
+                "read": read,
+                "write": write,
+                "automatic_recall":
+                    automatic_recall,
+            }
+        })
+        .to_string())
     })
     .await
-    .map_err(|error| {
-        format!(
-            "The memory configuration worker task failed: {}",
-            error
-        )
-    })?
+    .map_err(|error| format!("The memory configuration worker task failed: {}", error))?
 }
-
 
 #[tauri::command]
 pub async fn update_permission_settings(
@@ -794,8 +587,7 @@ pub async fn update_permission_settings(
     tauri::async_runtime::spawn_blocking(move || {
         let root = application_root()?;
 
-        let definition_path = definition
-            .unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
+        let definition_path = definition.unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
 
         let path = root.join(&definition_path);
 
@@ -808,65 +600,40 @@ pub async fn update_permission_settings(
 
         let canonical_root = root
             .canonicalize()
-            .map_err(|error| {
-                format!(
-                    "Could not resolve the application root: {}",
-                    error
-                )
-            })?;
+            .map_err(|error| format!("Could not resolve the application root: {}", error))?;
 
         let canonical_path = path
             .canonicalize()
-            .map_err(|error| {
-                format!(
-                    "Could not resolve the Intelligence Definition: {}",
-                    error
-                )
-            })?;
+            .map_err(|error| format!("Could not resolve the Intelligence Definition: {}", error))?;
 
         if !canonical_path.starts_with(&canonical_root) {
             return Err(
-                "The Intelligence Definition must be inside the application root."
-                    .to_string()
+                "The Intelligence Definition must be inside the application root.".to_string(),
             );
         }
 
         let raw = std::fs::read_to_string(&canonical_path)
-            .map_err(|error| {
+            .map_err(|error| format!("Could not read the Intelligence Definition: {}", error))?;
+
+        let mut definition_value: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|error| {
                 format!(
-                    "Could not read the Intelligence Definition: {}",
+                    "The Intelligence Definition contains invalid JSON: {}",
                     error
                 )
             })?;
 
-        let mut definition_value: serde_json::Value =
-            serde_json::from_str(&raw)
-                .map_err(|error| {
-                    format!(
-                        "The Intelligence Definition contains invalid JSON: {}",
-                        error
-                    )
-                })?;
-
         let root_object = definition_value
             .as_object_mut()
-            .ok_or_else(|| {
-                "The Intelligence Definition must be a JSON object."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The Intelligence Definition must be a JSON object.".to_string())?;
 
         let permissions_value = root_object
             .entry("permissions")
-            .or_insert_with(|| {
-                serde_json::json!({})
-            });
+            .or_insert_with(|| serde_json::json!({}));
 
         let permissions = permissions_value
             .as_object_mut()
-            .ok_or_else(|| {
-                "The permissions configuration must be a JSON object."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The permissions configuration must be a JSON object.".to_string())?;
 
         permissions.insert(
             "read_records".to_string(),
@@ -898,58 +665,30 @@ pub async fn update_permission_settings(
             serde_json::Value::Bool(modify_system_files),
         );
 
-        let formatted =
-            serde_json::to_string_pretty(
-                &definition_value
-            )
-            .map_err(|error| {
-                format!(
-                    "Could not serialize the Intelligence Definition: {}",
-                    error
-                )
-            })?;
+        let formatted = serde_json::to_string_pretty(&definition_value).map_err(|error| {
+            format!("Could not serialize the Intelligence Definition: {}", error)
+        })?;
 
         let parent = canonical_path
             .parent()
-            .ok_or_else(|| {
-                "The Intelligence Definition has no parent directory."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The Intelligence Definition has no parent directory.".to_string())?;
 
         let file_name = canonical_path
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| {
-                "The Intelligence Definition filename is invalid."
-                    .to_string()
-            })?;
+            .ok_or_else(|| "The Intelligence Definition filename is invalid.".to_string())?;
 
-        let temporary_path = parent.join(
-            format!(
-                ".{}.permissions-update.tmp",
-                file_name
-            )
-        );
+        let temporary_path = parent.join(format!(".{}.permissions-update.tmp", file_name));
 
-        std::fs::write(
-            &temporary_path,
-            format!("{}\n", formatted),
-        )
-        .map_err(|error| {
+        std::fs::write(&temporary_path, format!("{}\n", formatted)).map_err(|error| {
             format!(
                 "Could not write the temporary Intelligence Definition: {}",
                 error
             )
         })?;
 
-        std::fs::rename(
-            &temporary_path,
-            &canonical_path,
-        )
-        .map_err(|error| {
-            let _ = std::fs::remove_file(
-                &temporary_path
-            );
+        std::fs::rename(&temporary_path, &canonical_path).map_err(|error| {
+            let _ = std::fs::remove_file(&temporary_path);
 
             format!(
                 "Could not activate the updated Intelligence Definition: {}",
@@ -957,32 +696,24 @@ pub async fn update_permission_settings(
             )
         })?;
 
-        Ok(
-            serde_json::json!({
-                "status": "success",
-                "permissions": {
-                    "read_records": read_records,
-                    "write_records": write_records,
-                    "write_history": write_history,
-                    "run_approved_commands":
-                        run_approved_commands,
-                    "network_access": network_access,
-                    "modify_system_files":
-                        modify_system_files,
-                }
-            })
-            .to_string()
-        )
+        Ok(serde_json::json!({
+            "status": "success",
+            "permissions": {
+                "read_records": read_records,
+                "write_records": write_records,
+                "write_history": write_history,
+                "run_approved_commands":
+                    run_approved_commands,
+                "network_access": network_access,
+                "modify_system_files":
+                    modify_system_files,
+            }
+        })
+        .to_string())
     })
     .await
-    .map_err(|error| {
-        format!(
-            "The permission configuration worker task failed: {}",
-            error
-        )
-    })?
+    .map_err(|error| format!("The permission configuration worker task failed: {}", error))?
 }
-
 
 #[tauri::command]
 pub async fn update_personalization_settings(
@@ -994,8 +725,7 @@ pub async fn update_personalization_settings(
     tauri::async_runtime::spawn_blocking(move || {
         let root = application_root()?;
 
-        let definition_path = definition
-            .unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
+        let definition_path = definition.unwrap_or_else(|| DEFAULT_DEFINITION_PATH.to_string());
 
         let path = root.join(&definition_path);
 
@@ -1008,103 +738,58 @@ pub async fn update_personalization_settings(
 
         let canonical_root = root
             .canonicalize()
-            .map_err(|error| {
-                format!(
-                    "Could not resolve the application root: {}",
-                    error
-                )
-            })?;
+            .map_err(|error| format!("Could not resolve the application root: {}", error))?;
 
         let canonical_path = path
             .canonicalize()
-            .map_err(|error| {
-                format!(
-                    "Could not resolve the Intelligence Definition: {}",
-                    error
-                )
-            })?;
+            .map_err(|error| format!("Could not resolve the Intelligence Definition: {}", error))?;
 
         if !canonical_path.starts_with(&canonical_root) {
             return Err(
-                "The Intelligence Definition must be inside the application root."
-                    .to_string()
+                "The Intelligence Definition must be inside the application root.".to_string(),
             );
         }
 
-        let clean_display_name =
-            display_name.trim().to_string();
+        let clean_display_name = display_name.trim().to_string();
 
-        let clean_role =
-            role.trim().to_string();
+        let clean_role = role.trim().to_string();
 
-        let clean_description =
-            description.trim().to_string();
+        let clean_description = description.trim().to_string();
 
         if clean_display_name.is_empty() {
-            return Err(
-                "Display name cannot be empty."
-                    .to_string()
-            );
+            return Err("Display name cannot be empty.".to_string());
         }
 
         if clean_role.is_empty() {
-            return Err(
-                "Role cannot be empty."
-                    .to_string()
-            );
+            return Err("Role cannot be empty.".to_string());
         }
 
         if clean_description.is_empty() {
-            return Err(
-                "Description cannot be empty."
-                    .to_string()
-            );
+            return Err("Description cannot be empty.".to_string());
         }
 
-        let raw =
-            std::fs::read_to_string(
-                &canonical_path
-            )
-            .map_err(|error| {
+        let raw = std::fs::read_to_string(&canonical_path)
+            .map_err(|error| format!("Could not read the Intelligence Definition: {}", error))?;
+
+        let mut definition_value: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|error| {
                 format!(
-                    "Could not read the Intelligence Definition: {}",
+                    "The Intelligence Definition contains invalid JSON: {}",
                     error
                 )
             })?;
 
-        let mut definition_value:
-            serde_json::Value =
-            serde_json::from_str(&raw)
-                .map_err(|error| {
-                    format!(
-                        "The Intelligence Definition contains invalid JSON: {}",
-                        error
-                    )
-                })?;
+        let root_object = definition_value
+            .as_object_mut()
+            .ok_or_else(|| "The Intelligence Definition must be a JSON object.".to_string())?;
 
-        let root_object =
-            definition_value
-                .as_object_mut()
-                .ok_or_else(|| {
-                    "The Intelligence Definition must be a JSON object."
-                        .to_string()
-                })?;
+        let identity_value = root_object.get_mut("identity").ok_or_else(|| {
+            "The Intelligence Definition is missing identity configuration.".to_string()
+        })?;
 
-        let identity_value =
-            root_object
-                .get_mut("identity")
-                .ok_or_else(|| {
-                    "The Intelligence Definition is missing identity configuration."
-                        .to_string()
-                })?;
-
-        let identity =
-            identity_value
-                .as_object_mut()
-                .ok_or_else(|| {
-                    "The identity configuration must be a JSON object."
-                        .to_string()
-                })?;
+        let identity = identity_value
+            .as_object_mut()
+            .ok_or_else(|| "The identity configuration must be a JSON object.".to_string())?;
 
         /*
          * Preserve stable internal identity fields:
@@ -1118,83 +803,43 @@ pub async fn update_personalization_settings(
 
         identity.insert(
             "display_name".to_string(),
-            serde_json::Value::String(
-                clean_display_name.clone()
-            ),
+            serde_json::Value::String(clean_display_name.clone()),
         );
 
         identity.insert(
             "role".to_string(),
-            serde_json::Value::String(
-                clean_role.clone()
-            ),
+            serde_json::Value::String(clean_role.clone()),
         );
 
         identity.insert(
             "description".to_string(),
-            serde_json::Value::String(
-                clean_description.clone()
-            ),
+            serde_json::Value::String(clean_description.clone()),
         );
 
-        let formatted =
-            serde_json::to_string_pretty(
-                &definition_value
-            )
-            .map_err(|error| {
-                format!(
-                    "Could not serialize the Intelligence Definition: {}",
-                    error
-                )
-            })?;
+        let formatted = serde_json::to_string_pretty(&definition_value).map_err(|error| {
+            format!("Could not serialize the Intelligence Definition: {}", error)
+        })?;
 
-        let parent =
-            canonical_path
-                .parent()
-                .ok_or_else(|| {
-                    "The Intelligence Definition has no parent directory."
-                        .to_string()
-                })?;
+        let parent = canonical_path
+            .parent()
+            .ok_or_else(|| "The Intelligence Definition has no parent directory.".to_string())?;
 
-        let file_name =
-            canonical_path
-                .file_name()
-                .and_then(
-                    |value| value.to_str()
-                )
-                .ok_or_else(|| {
-                    "The Intelligence Definition filename is invalid."
-                        .to_string()
-                })?;
+        let file_name = canonical_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "The Intelligence Definition filename is invalid.".to_string())?;
 
-        let temporary_path =
-            parent.join(
-                format!(
-                    ".{}.personalization-update.tmp",
-                    file_name
-                )
-            );
+        let temporary_path = parent.join(format!(".{}.personalization-update.tmp", file_name));
 
-        std::fs::write(
-            &temporary_path,
-            format!("{}\n", formatted),
-        )
-        .map_err(|error| {
+        std::fs::write(&temporary_path, format!("{}\n", formatted)).map_err(|error| {
             format!(
                 "Could not write the temporary Intelligence Definition: {}",
                 error
             )
         })?;
 
-        std::fs::rename(
-            &temporary_path,
-            &canonical_path,
-        )
-        .map_err(|error| {
-            let _ =
-                std::fs::remove_file(
-                    &temporary_path
-                );
+        std::fs::rename(&temporary_path, &canonical_path).map_err(|error| {
+            let _ = std::fs::remove_file(&temporary_path);
 
             format!(
                 "Could not activate the updated Intelligence Definition: {}",
@@ -1202,20 +847,18 @@ pub async fn update_personalization_settings(
             )
         })?;
 
-        Ok(
-            serde_json::json!({
-                "status": "success",
-                "personalization": {
-                    "display_name":
-                        clean_display_name,
-                    "role":
-                        clean_role,
-                    "description":
-                        clean_description,
-                }
-            })
-            .to_string()
-        )
+        Ok(serde_json::json!({
+            "status": "success",
+            "personalization": {
+                "display_name":
+                    clean_display_name,
+                "role":
+                    clean_role,
+                "description":
+                    clean_description,
+            }
+        })
+        .to_string())
     })
     .await
     .map_err(|error| {
@@ -1225,7 +868,6 @@ pub async fn update_personalization_settings(
         )
     })?
 }
-
 
 #[tauri::command]
 pub async fn get_intelligence_definition(definition: Option<String>) -> Result<String, String> {

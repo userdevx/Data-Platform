@@ -29,6 +29,9 @@ type ConfigurationPanelProps = {
     | ConfigurationSection
     | null;
   onClose: () => void;
+  onSectionChange?: (
+    section: ConfigurationSection,
+  ) => void;
 };
 
 
@@ -83,6 +86,7 @@ function getDefaultMemorySettings(): MemorySettings {
 export default function ConfigurationPanel({
   section,
   onClose,
+  onSectionChange,
 }: ConfigurationPanelProps) {
   const [
     memorySettings,
@@ -563,6 +567,26 @@ export default function ConfigurationPanel({
             ×
           </button>
         </header>
+
+        {onSectionChange ? (
+          <nav className="dw-config-tabs" aria-label="Settings sections">
+            {(
+              ["memory", "personalization", "permissions", "system-details"] as const
+            ).map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={item === section ? "dw-config-tab is-active" : "dw-config-tab"}
+                aria-current={item === section ? "page" : undefined}
+                onClick={() => {
+                  onSectionChange(item);
+                }}
+              >
+                {getTitle(item)}
+              </button>
+            ))}
+          </nav>
+        ) : null}
 
         <div className="configuration-panel-body">
           {section === "memory" ? (

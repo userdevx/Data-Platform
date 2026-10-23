@@ -1,0 +1,37 @@
+.dw-app {
+  display: flex;
+  min-height: 100vh;
+  background: var(--dw-bg);
+  color: var(--dw-text);
+  font-family: var(--dw-font);
+}
+.dw-app__content { flex: 1 1 auto; min-width: 0; height: 100vh; overflow-y: auto; }
+.dw-app__content .intelligence-page { display: flex; flex-direction: column; gap: 24px; }
+
+.dw-config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--dw-border);
+  margin-bottom: 12px;
+}
+.dw-config-tab {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--dw-radius-sm);
+  background: transparent;
+  color: var(--dw-text-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.dw-config-tab:hover { background: var(--dw-blue-soft); color: var(--dw-blue-strong); }
+.dw-config-tab.is-active { background: var(--dw-blue-soft); color: var(--dw-blue-strong); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .dw-app { flex-direction: column; }
+  .dw-sidebar { position: static; height: auto; flex-basis: auto; }
+  .dw-app__content { height: auto; }
+}

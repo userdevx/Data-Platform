@@ -1,1 +1,4 @@
-export type UserPage = "intelligence" | "applications" | "workspace";
+export type UserPage =
+  | "intelligence"
+  | "applications"
+  | "data";

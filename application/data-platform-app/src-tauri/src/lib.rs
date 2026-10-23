@@ -1,4 +1,6 @@
 mod agent_bridge;
+mod application_builder;
+mod application_generation;
 mod developer_terminal;
 mod intelligence_bridge;
 mod messaging_bridge;
@@ -71,7 +73,6 @@ struct WorkspaceOutput {
     rows: Vec<HashMap<String, String>>,
 }
 
-
 #[derive(Serialize)]
 struct EngineStatus {
     status: String,
@@ -100,8 +101,6 @@ fn timestamp() -> Result<u64, String> {
         .map_err(|error| error.to_string())?
         .as_secs())
 }
-
-
 
 fn find_application_root() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -653,66 +652,40 @@ fn csv_escape(value: &str) -> String {
 
 #[tauri::command]
 fn get_engine_status() -> Result<EngineStatus, String> {
-    let (path, records) =
-        load_data_engine_records()?;
+    let (path, records) = load_data_engine_records()?;
 
-    let root =
-        find_application_root()?;
+    let root = find_application_root()?;
 
-    let definition_path =
-        root.join(
-            "config/intelligence/active.json"
-        );
+    let definition_path = root.join("config/intelligence/active.json");
 
-    let definition_text =
-        fs::read_to_string(
-            &definition_path
-        )
-        .map_err(|error| {
-            format!(
-                "Could not read active Intelligence Definition: {}",
-                error
-            )
-        })?;
+    let definition_text = fs::read_to_string(&definition_path)
+        .map_err(|error| format!("Could not read active Intelligence Definition: {}", error))?;
 
-    let definition_value:
-        serde_json::Value =
-        serde_json::from_str(
-            &definition_text
-        )
-        .map_err(|error| {
+    let definition_value: serde_json::Value =
+        serde_json::from_str(&definition_text).map_err(|error| {
             format!(
                 "Active Intelligence Definition contains invalid JSON: {}",
                 error
             )
         })?;
 
-    let validation_enabled =
-        definition_value
-            .get("validation")
-            .and_then(|value| {
-                value.get("enabled")
-            })
-            .and_then(|value| {
-                value.as_bool()
-            })
-            .unwrap_or(false);
+    let validation_enabled = definition_value
+        .get("validation")
+        .and_then(|value| value.get("enabled"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
 
     Ok(EngineStatus {
         status: "ready".to_string(),
         record_count: records.len(),
-        records_path:
-            path.to_string_lossy().to_string(),
-        connected_sources:
-            connected_sources_count()?,
-        definition_status:
-            "active".to_string(),
-        validation_status:
-            if validation_enabled {
-                "enabled".to_string()
-            } else {
-                "disabled".to_string()
-            },
+        records_path: path.to_string_lossy().to_string(),
+        connected_sources: connected_sources_count()?,
+        definition_status: "active".to_string(),
+        validation_status: if validation_enabled {
+            "enabled".to_string()
+        } else {
+            "disabled".to_string()
+        },
     })
 }
 
@@ -1461,7 +1434,6 @@ fn workspace_action(
     }
 }
 
-
 #[tauri::command]
 fn update_application() -> Result<String, String> {
     let root = std::env::var("DATA_PLATFORM_ROOT")
@@ -1563,16 +1535,10 @@ pub fn run() {
             // Intelligence auto-start on app launch.
             let _ = agent_bridge::start_agent_worker();
 
-            if let Some(window) =
-                app.get_webview_window("main")
-            {
+            if let Some(window) = app.get_webview_window("main") {
                 window.on_window_event(|event| {
-                    if matches!(
-                        event,
-                        tauri::WindowEvent::Destroyed
-                    ) {
-                        let _ =
-                            agent_bridge::stop_agent_worker();
+                    if matches!(event, tauri::WindowEvent::Destroyed) {
+                        let _ = agent_bridge::stop_agent_worker();
                     }
                 });
             }
@@ -1580,6 +1546,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            application_generation::generate_application_scaffold,
+            application_builder::start_application_build,
             get_engine_status,
             get_recent_records,
             query_records,

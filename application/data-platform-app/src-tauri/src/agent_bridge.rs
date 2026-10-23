@@ -22,8 +22,6 @@ fn now_timestamp() -> Result<u64, String> {
         .as_secs())
 }
 
-
-
 fn find_project_root() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
