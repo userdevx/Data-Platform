@@ -1,0 +1,8 @@
+{
+  "definition_version": 1,
+  "configuration_status": "active",
+  "builder_image_id": "sha256:1484ad8a85261f4259a332991bf4425945e2750e8e22e113eb07eccbad203698",
+  "cpu_count": 1.0,
+  "memory_mb": 512,
+  "pids": 128
+}

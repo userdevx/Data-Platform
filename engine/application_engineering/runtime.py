@@ -20,6 +20,21 @@ from engine.data_engine.record_writer import (
 )
 
 
+from uuid import uuid4
+
+from engine.application_engineering.execution_policy import (
+    BuilderExecutionPolicy,
+    make_builder_manager,
+)
+from engine.sandbox.models import (
+    SandboxRequest,
+    ResourceLimits,
+    RuntimeKind,
+    IsolationClass,
+    TrustLevel,
+    WorkloadType,
+)
+
 _STAGE_DATA_TYPES = {
     "compile": "compile_result",
     "test": "test_result",
@@ -43,6 +58,8 @@ class ApplicationEngineeringRuntime:
         application_id: str,
         requirement_id: str,
         writer: DataEngineRecordWriter,
+        execution_policy: BuilderExecutionPolicy | None = None,
+        sandbox_manager: Any | None = None,
     ) -> None:
         self.project_root = (
             project_root.resolve()
@@ -57,6 +74,16 @@ class ApplicationEngineeringRuntime:
             requirement_id
         )
         self.writer = writer
+        self.execution_policy = (
+            execution_policy
+            if execution_policy is not None
+            else BuilderExecutionPolicy.load(self.project_root)
+        )
+        self.sandbox_manager = (
+            sandbox_manager
+            if sandbox_manager is not None
+            else make_builder_manager(self.execution_policy.image_id)
+        )
 
     def _record(
         self,
@@ -176,206 +203,141 @@ class ApplicationEngineeringRuntime:
             },
         )
 
-    def _approved_command(
-        self,
-        command_text: str,
-    ) -> list[str]:
+    def _approved_command(self, command_text: str) -> list[str]:
         try:
-            argv = shlex.split(
-                command_text
-            )
-        except ValueError as error:
+            argv = shlex.split(command_text)
+        except ValueError as exc:
             raise ApplicationEngineeringError(
                 "Invalid engineering command."
-            ) from error
+            ) from exc
 
-        if not argv:
+        if len(argv) != 2:
             raise ApplicationEngineeringError(
-                "Engineering command is empty."
+                "Only Python script execution is verified."
             )
 
-        blocked_tokens = {
-            "&&",
-            "||",
-            "|",
-            ">",
-            ">>",
-            "<",
-            ";",
-        }
-
-        if any(
-            token in blocked_tokens
-            for token in argv
-        ):
+        if argv[0] not in {"python", "python3"}:
             raise ApplicationEngineeringError(
-                "Shell composition is not allowed."
+                "Executable is not verified in the Builder image."
             )
 
-        executable = argv[0]
-
-        project_python = (
-            self.project_root
-            / "venv"
-            / "bin"
-            / "python"
-        )
-
-        if executable in {
-            "python",
-            "python3",
-        }:
-            if not project_python.is_file():
-                raise ApplicationEngineeringError(
-                    "Data Platform Python "
-                    "runtime is unavailable."
-                )
-
-            argv[0] = str(
-                project_python
-            )
-
-            return argv
-
-        approved_names = {
-            "node",
-            "npm",
-            "npx",
-            "cargo",
-            "rustc",
-            "go",
-            "gcc",
-            "g++",
-            "make",
-            "cmake",
-            "java",
-            "javac",
-        }
+        script_argument = argv[1]
+        script_path = Path(script_argument)
 
         if (
-            executable
-            not in approved_names
+            script_path.is_absolute()
+            or not script_argument.endswith(".py")
+            or script_argument.startswith("-")
+            or any(part == ".." for part in script_path.parts)
         ):
             raise ApplicationEngineeringError(
-                "Executable is not approved: "
-                + executable
+                "Invalid Python script path."
             )
 
-        resolved = shutil.which(
-            executable
-        )
+        resolved = (self.workspace / script_path).resolve()
 
-        if resolved is None:
-            raise ApplicationEngineeringError(
-                "Required executable is "
-                "not installed: "
-                + executable
-            )
-
-        # Dependency installation is not part
-        # of an automatically generated
-        # validation command.
         if (
-            executable == "npm"
-            and len(argv) > 1
-            and argv[1].lower()
-            in {
-                "install",
-                "i",
-                "add",
-            }
+            not resolved.is_relative_to(self.workspace)
+            or not resolved.is_file()
         ):
             raise ApplicationEngineeringError(
-                "Automatic dependency "
-                "installation is blocked."
+                "Python script is outside the workspace or missing."
             )
 
-        argv[0] = resolved
-
-        return argv
+        guest_path = (
+            Path("/workspace")
+            / resolved.relative_to(self.workspace)
+        )
+        return ["python3", str(guest_path)]
 
     def _execute_step(
         self,
         step: ValidationStep,
     ) -> dict[str, Any]:
-        stage = self._stage(
-            step
-        )
+        stage = self._stage(step)
+        execution_id = str(uuid4())
 
-        if not step.command:
-            raise ApplicationEngineeringError(
-                "Every production validation "
-                "step requires a command."
-            )
-
-        argv = self._approved_command(
-            step.command
-        )
-
-        timeout = {
-            "compile": 300,
-            "test": 600,
-            "build": 900,
-            "run": 120,
-        }[stage]
+        result: dict[str, Any] = {
+            "stage": stage,
+            "description": step.description,
+            "argv": [],
+            "exit_code": None,
+            "stdout": "",
+            "stderr": "",
+            "success": False,
+            "execution_id": execution_id,
+            "runtime_kind": None,
+            "isolation_class": None,
+            "timed_out": False,
+            "duration_seconds": None,
+            "image_id": self.execution_policy.image_id,
+        }
 
         try:
-            completed = subprocess.run(
-                argv,
-                cwd=self.workspace,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
+            if not step.command:
+                raise ApplicationEngineeringError(
+                    "Engineering validation command is missing."
+                )
+
+            argv = self._approved_command(step.command)
+            result["argv"] = argv
+
+            timeout = {
+                "compile": 300,
+                "test": 600,
+                "build": 900,
+                "run": 120,
+            }[stage]
+
+            request = SandboxRequest(
+                workload_type=WorkloadType.GENERATED_CODE,
+                trust_level=TrustLevel.UNTRUSTED,
+                command=tuple(argv),
+                working_directory=self.workspace,
+                network_enabled=False,
+                writable_workspace=False,
+                limits=ResourceLimits(
+                    cpu_count=self.execution_policy.cpu_count,
+                    memory_mb=self.execution_policy.memory_mb,
+                    pids=self.execution_policy.pids,
+                    timeout_seconds=timeout,
+                ),
             )
 
-            result = {
-                "stage": stage,
-                "description": (
-                    step.description
-                ),
-                "argv": argv,
-                "exit_code": (
-                    completed.returncode
-                ),
-                "stdout": (
-                    completed.stdout[
-                        -12000:
-                    ]
-                ),
-                "stderr": (
-                    completed.stderr[
-                        -12000:
-                    ]
-                ),
-                "success": (
-                    completed.returncode
-                    == 0
-                ),
-            }
+            completed = self.sandbox_manager.execute(request)
 
-        except subprocess.TimeoutExpired:
-            result = {
-                "stage": stage,
-                "description": (
-                    step.description
-                ),
-                "argv": argv,
-                "exit_code": -1,
-                "stdout": "",
-                "stderr": (
-                    "Engineering command timed out."
-                ),
-                "success": False,
-            }
+            result.update(
+                exit_code=completed.exit_code,
+                stdout=completed.stdout[-12000:],
+                stderr=completed.stderr[-12000:],
+                timed_out=completed.timed_out,
+                duration_seconds=completed.duration_seconds,
+                runtime_kind=completed.runtime_kind.value,
+                isolation_class=completed.isolation_class.value,
+            )
 
-        self._record(
-            _STAGE_DATA_TYPES[
-                stage
-            ],
-            result,
-        )
+            if (
+                completed.runtime_kind != RuntimeKind.GVISOR
+                or completed.isolation_class
+                != IsolationClass.KERNEL_EMULATION
+            ):
+                result["stderr"] += (
+                    "\\nUnexpected sandbox isolation boundary."
+                )
+            else:
+                result["success"] = (
+                    completed.exit_code == 0
+                    and not completed.timed_out
+                )
 
+        except Exception as exc:
+            result["stderr"] = (
+                f"{type(exc).__name__}: {exc}"
+            )[-12000:]
+
+        # Preserve the established Data Engine stage record.
+        # A persistence failure must propagate.
+        self._record(_STAGE_DATA_TYPES[stage], result)
         return result
 
     def execute(
