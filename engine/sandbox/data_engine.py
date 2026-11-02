@@ -38,7 +38,7 @@ def sandbox_result_record(
             "stdout": stdout,
             "stderr": stderr,
         },
-        "unit": None,
+        "unit": "record",
     }
 
     if tuple(record) != CANONICAL_FIELDS:
