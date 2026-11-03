@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "template_id": "python-automation-basic",
+  "display_name": "Python Automation Tool",
+  "category": "automation",
+  "language": "python",
+  "framework": null,
+  "platforms": [
+    "linux"
+  ],
+  "capabilities": [
+    "automation"
+  ],
+  "files": [
+    {
+      "source": "main.py.tpl",
+      "destination": "src/main.py",
+      "render_mode": "python-string"
+    }
+  ]
+}

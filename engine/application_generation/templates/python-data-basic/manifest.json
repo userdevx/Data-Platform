@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "template_id": "python-data-basic",
+  "display_name": "Python Data Application",
+  "category": "data",
+  "language": "python",
+  "framework": null,
+  "platforms": [
+    "linux"
+  ],
+  "capabilities": [
+    "data-processing"
+  ],
+  "files": [
+    {
+      "source": "main.py.tpl",
+      "destination": "src/main.py",
+      "render_mode": "python-string"
+    }
+  ]
+}

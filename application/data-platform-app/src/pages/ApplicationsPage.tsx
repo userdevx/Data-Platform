@@ -8,19 +8,10 @@ import {
 
 import {
   generateApplication,
-  type ApplicationType,
   type GeneratedApplication,
 } from "../bridge/applicationGenerationBridge";
 
 import "./ApplicationsPage.css";
-
-
-const applicationTypes: ApplicationType[] = [
-  "Web application",
-  "Desktop application",
-  "Data application",
-  "Automation tool",
-];
 
 
 function errorText(
@@ -43,14 +34,6 @@ export default function ApplicationsPage() {
     request,
     setRequest,
   ] = useState("");
-
-
-  const [
-    applicationType,
-    setApplicationType,
-  ] = useState<ApplicationType>(
-    "Desktop application",
-  );
 
 
   const [
@@ -97,15 +80,8 @@ export default function ApplicationsPage() {
     );
 
     try {
-      const generated =
-        await generateApplication(
-          request.trim(),
-          applicationType,
-        );
-
-      setResult(
-        generated,
-      );
+      const generated = await generateApplication(request.trim());
+      setResult(generated);
     } catch (error) {
       setBuildError(
         errorText(
@@ -209,30 +185,6 @@ export default function ApplicationsPage() {
         </section>
 
 
-        <div
-          className="dw-build-types"
-          aria-label="Application type"
-        >
-          {applicationTypes.map((type) => (
-            <button
-              key={type}
-              type="button"
-              disabled={building}
-              className={
-                type === applicationType
-                  ? "dw-build-type is-active"
-                  : "dw-build-type"
-              }
-              onClick={() => {
-                setApplicationType(
-                  type,
-                );
-              }}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
 
 
 
@@ -347,11 +299,6 @@ export default function ApplicationsPage() {
         ) : null}
 
 
-        <p className="dw-build-runtime-note">
-          Build creates a real local starter project.
-          Local-model refinement and sandbox
-          compile/test are the next generation stage.
-        </p>
       </section>
     </main>
   );

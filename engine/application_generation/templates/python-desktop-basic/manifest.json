@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "template_id": "python-desktop-basic",
+  "display_name": "Python Desktop Application",
+  "category": "desktop",
+  "language": "python",
+  "framework": "tkinter",
+  "platforms": [
+    "linux"
+  ],
+  "capabilities": [
+    "gui",
+    "local-execution"
+  ],
+  "files": [
+    {
+      "source": "main.py.tpl",
+      "destination": "src/main.py",
+      "render_mode": "python-string"
+    }
+  ]
+}

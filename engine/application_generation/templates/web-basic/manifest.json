@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "template_id": "web-basic",
+  "display_name": "Web Application",
+  "category": "web",
+  "language": "html",
+  "framework": null,
+  "platforms": [
+    "linux"
+  ],
+  "capabilities": [
+    "web-interface"
+  ],
+  "files": [
+    {
+      "source": "index.html.tpl",
+      "destination": "index.html",
+      "render_mode": "html"
+    }
+  ]
+}

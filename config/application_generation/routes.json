@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "routes": [
+    {
+      "template_id": "web-basic",
+      "signals": [
+        "website",
+        "web application",
+        "web app",
+        "webpage",
+        "web page"
+      ]
+    },
+    {
+      "template_id": "python-desktop-basic",
+      "signals": [
+        "desktop application",
+        "desktop app",
+        "tkinter",
+        "desktop gui"
+      ]
+    },
+    {
+      "template_id": "python-data-basic",
+      "signals": [
+        "csv",
+        "data processing",
+        "data pipeline",
+        "data analysis"
+      ]
+    },
+    {
+      "template_id": "python-automation-basic",
+      "signals": [
+        "automation tool",
+        "automate files",
+        "automate folders",
+        "file automation"
+      ]
+    }
+  ]
+}

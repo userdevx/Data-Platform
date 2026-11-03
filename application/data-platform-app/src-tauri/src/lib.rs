@@ -1,5 +1,6 @@
 mod agent_bridge;
 mod application_builder;
+mod application_builder_bridge;
 mod application_generation;
 mod developer_terminal;
 mod intelligence_bridge;
@@ -1547,7 +1548,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             application_generation::generate_application_scaffold,
-            application_builder::start_application_build,
+            application_builder_bridge::start_application_build_bridge,
             get_engine_status,
             get_recent_records,
             query_records,

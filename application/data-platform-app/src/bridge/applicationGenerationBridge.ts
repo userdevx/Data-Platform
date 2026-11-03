@@ -50,13 +50,11 @@ export type GeneratedApplication = {
 
 export async function generateApplication(
   request: string,
-  applicationType: ApplicationType,
 ): Promise<GeneratedApplication> {
   return invoke<GeneratedApplication>(
-    "start_application_build",
+    "start_application_build_bridge",
     {
       request,
-      applicationType,
     },
   );
 }

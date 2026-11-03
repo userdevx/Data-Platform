@@ -1,0 +1,52 @@
+{
+  "definition_version": 1,
+  "purpose": "Rust template source snapshot",
+  "source": "application/data-platform-app/src-tauri/src/application_generation.rs",
+  "source_sha256": "b08ae84c635acf2b57e99ca4922772a3850d896c994a1280eeb340a6564e70ae",
+  "categories": {
+    "web": {
+      "function": "web_application_files",
+      "literals": [
+        {
+          "file": "web/raw_01.txt",
+          "sha256": "60db68ce87d80e655b2ee3c4e7f891cc6532ee4607374cd8b955a18ad7cde095",
+          "size_bytes": 2175,
+          "source_byte_offset": 2268
+        }
+      ]
+    },
+    "desktop": {
+      "function": "desktop_application_files",
+      "literals": [
+        {
+          "file": "desktop/raw_01.txt",
+          "sha256": "04d1a6bc4cf29e6af08b7e57feda9d37afb23d57b7d329a10313a96ee88e03cc",
+          "size_bytes": 1609,
+          "source_byte_offset": 4792
+        }
+      ]
+    },
+    "data": {
+      "function": "data_application_files",
+      "literals": [
+        {
+          "file": "data/raw_01.txt",
+          "sha256": "5d1f3fa31399ce3ebab7aa7a952e750e710a0be5caf6133a5a8607d11eef0410",
+          "size_bytes": 1231,
+          "source_byte_offset": 6754
+        }
+      ]
+    },
+    "automation": {
+      "function": "automation_tool_files",
+      "literals": [
+        {
+          "file": "automation/raw_01.txt",
+          "sha256": "0643327a895addd0daeff26f20ad5e8d2d29112a640690fc51beaf6bad52c713",
+          "size_bytes": 779,
+          "source_byte_offset": 8337
+        }
+      ]
+    }
+  }
+}
