@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "default": {
+    "num_predict": 384,
+    "num_ctx": 8192,
+    "stream": false,
+    "reject_truncated": false
+  },
+  "capabilities": {
+    "code_generation": {
+      "num_predict": 3072,
+      "num_ctx": 8192,
+      "stream": true,
+      "reject_truncated": true,
+      "idle_timeout_seconds": 300,
+      "total_timeout_seconds": 1500
+    }
+  }
+}

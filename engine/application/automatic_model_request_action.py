@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from engine.application.environment import (
     load_project_environment,
@@ -131,6 +131,7 @@ def process_automatic_model_request(
     required_capability: str,
     arguments: dict[str, Any] | None = None,
     request_id: str = "",
+    on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     load_project_environment()
 
@@ -409,6 +410,13 @@ def process_automatic_model_request(
                 process_manual_model_request(
                     question=clean_question,
                     option_id=option_id,
+                    # Passed only when a caller asks for progress, so the
+                    # call is unchanged for every existing caller.
+                    **(
+                        {"on_progress": on_progress}
+                        if on_progress is not None
+                        else {}
+                    ),
                     capability=(
                         clean_capability
                     ),

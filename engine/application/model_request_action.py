@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 import re
 
 from engine.application.environment import (
@@ -29,6 +29,19 @@ from services.visual_model.provider_http import (
 
 from engine.application.model_options_action import (
     REGISTRY_CONFIGURATION_PATH,
+)
+from engine.application.generation_profiles import (
+    load_generation_profile,
+)
+from services.visual_model.provider_streaming import (
+    stream_json_lines,
+)
+
+# Per-capability output limits, streaming and timeouts live beside
+# the model registry, so no request size is fixed in code.
+GENERATION_PROFILES_PATH = (
+    REGISTRY_CONFIGURATION_PATH.parent
+    / "generation_profiles.json"
 )
 
 from engine.application.huggingface_model_action import (
@@ -177,6 +190,7 @@ def process_manual_model_request(
     capability: str = "",
     arguments: dict[str, Any] | None = None,
     request_id: str = "",
+    on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     load_project_environment()
 
@@ -297,6 +311,8 @@ def process_manual_model_request(
             provider=provider,
             model_id=model_id,
             question=clean_question,
+            capability=selected_capability,
+            on_progress=on_progress,
         )
 
     elif (
@@ -437,73 +453,153 @@ def _ask_ollama(
     provider: VisualProviderConfiguration,
     model_id: str,
     question: str,
+    capability: str = "",
+    on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    response = request_json(
-        method="POST",
-        url=(
-            f"{provider.endpoint}"
-            "/api/chat"
-        ),
-        timeout_seconds=provider.timeout_seconds,
-        headers=provider.headers,
-        payload={
-            "model": model_id,
-            "stream": False,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": question,
-                }
-            ],
-            # Measured on this host: qwen3:8b answered "Reply with:
-            # ok" using 722 tokens in 177s with thinking enabled, and
-            # 2 tokens in 1.9s with it disabled.
-            "think": False,
-            # Hold the model in memory between requests. Reloading
-            # ~5GB per request dominates wall time on CPU.
-            "keep_alive": "30m",
-            "options": {
-                # At ~4-6 tok/s a 1024-token answer costs four
-                # minutes. 384 caps worst-case latency without
-                # truncating ordinary responses.
-                "num_predict": 384,
-                # Must match the ContextWindowManager capacity.
-                # Ollama defaults to 4096 with --context-shift, which
-                # silently evicts the oldest tokens -- the retrieved
-                # conversation context -- before the model reads them.
-                "num_ctx": 8192,
-            },
-        },
+    # Output length, context size, streaming and timeouts are set per
+    # capability in generation_profiles.json beside the model registry.
+    # Measured on this host with qwen3:8b on CPU: about 6 output and
+    # 14 prompt tokens per second, and about 20 s to load the model.
+    profile = load_generation_profile(
+        GENERATION_PROFILES_PATH,
+        capability,
     )
 
-    message = response.get("message")
+    payload = {
+        "model": model_id,
+        "stream": profile.stream,
+        "messages": [
+            {
+                "role": "user",
+                "content": question,
+            }
+        ],
+        # Measured on this host: qwen3:8b answered "Reply with:
+        # ok" using 722 tokens in 177s with thinking enabled, and
+        # 2 tokens in 1.9s with it disabled.
+        "think": False,
+        # Hold the model in memory between requests. Reloading
+        # ~5GB per request dominates wall time on CPU.
+        "keep_alive": "30m",
+        "options": {
+            "num_predict": profile.num_predict,
+            # Must match the ContextWindowManager capacity.
+            # Ollama defaults to 4096 with --context-shift, which
+            # silently evicts the oldest tokens -- the retrieved
+            # conversation context -- before the model reads them.
+            "num_ctx": profile.num_ctx,
+        },
+    }
 
-    if not isinstance(message, dict):
-        raise VisualProviderResponseError(
-            "The local model response is missing "
-            "the message object."
+    url = f"{provider.endpoint}/api/chat"
+
+    if profile.stream:
+        pieces: list[str] = []
+        produced = {"characters": 0}
+
+        def on_line(item: dict[str, Any]) -> None:
+            message = item.get("message")
+
+            piece = (
+                message.get("content")
+                if isinstance(message, dict)
+                else None
+            )
+
+            if not isinstance(piece, str) or not piece:
+                return
+
+            pieces.append(piece)
+            produced["characters"] += len(piece)
+
+            if on_progress is not None:
+                on_progress(
+                    {
+                        "event": "model_output",
+                        "capability": profile.name,
+                        "text": piece,
+                        "characters": produced["characters"],
+                    }
+                )
+
+        final = stream_json_lines(
+            url=url,
+            headers=provider.headers,
+            payload=payload,
+            idle_timeout_seconds=(
+                profile.idle_timeout_seconds
+            ),
+            total_timeout_seconds=(
+                profile.total_timeout_seconds
+            ),
+            on_line=on_line,
         )
 
-    answer = message.get("content")
+        answer = "".join(pieces)
+
+    else:
+        final = request_json(
+            method="POST",
+            url=url,
+            timeout_seconds=provider.timeout_seconds,
+            headers=provider.headers,
+            payload=payload,
+        )
+
+        message = final.get("message")
+
+        if not isinstance(message, dict):
+            raise VisualProviderResponseError(
+                "The local model response is missing "
+                "the message object."
+            )
+
+        answer = message.get("content")
 
     if not isinstance(answer, str) or not answer.strip():
         raise VisualProviderResponseError(
             "The local model returned no answer."
         )
 
+    done_reason = str(
+        final.get("done_reason") or ""
+    )
+
+    if (
+        profile.reject_truncated
+        and done_reason == "length"
+    ):
+        raise VisualProviderResponseError(
+            "The local model stopped at the configured "
+            f"output limit ({profile.num_predict} tokens "
+            f"for {profile.name}) before finishing."
+        )
+
     metadata = {
         "processing_location": "local",
         "done": bool(
-            response.get("done", False)
+            final.get("done", False)
         ),
-        "total_duration": response.get(
+        "total_duration": final.get(
             "total_duration",
             0,
         ),
-        "eval_count": response.get(
+        "eval_count": final.get(
             "eval_count",
             0,
         ),
+        "prompt_eval_count": final.get(
+            "prompt_eval_count",
+            0,
+        ),
+        "eval_duration": final.get(
+            "eval_duration",
+            0,
+        ),
+        "done_reason": done_reason,
+        "streamed": profile.stream,
+        "generation_profile": profile.name,
+        "num_predict": profile.num_predict,
     }
 
     return answer.strip(), metadata
