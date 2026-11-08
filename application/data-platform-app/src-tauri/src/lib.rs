@@ -1549,6 +1549,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             application_generation::generate_application_scaffold,
             application_builder_bridge::start_application_build_bridge,
+            application_builder_bridge::read_application_preview,
+            application_builder_bridge::start_application_build_stream,
             get_engine_status,
             get_recent_records,
             query_records,

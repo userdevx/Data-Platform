@@ -1,3 +1,4 @@
+import ApplicationPreview from "./ApplicationPreview";
 import {
   useState,
 } from "react";
@@ -9,6 +10,7 @@ import {
 import {
   generateApplication,
   type GeneratedApplication,
+  type BuildEvent,
 } from "../bridge/applicationGenerationBridge";
 
 import "./ApplicationsPage.css";
@@ -57,6 +59,18 @@ export default function ApplicationsPage() {
     );
 
 
+  const [buildEvents, setBuildEvents] =
+    useState<BuildEvent[]>([]);
+
+  const [buildWorkspaceOpen, setBuildWorkspaceOpen] = useState(false);
+
+  function returnToRequest(): void {
+    setBuildWorkspaceOpen(false);
+    setResult(null);
+    setBuildEvents([]);
+    setBuildError("");
+  }
+
   const canBuild =
     request.trim().length > 0
     && !building;
@@ -66,6 +80,8 @@ export default function ApplicationsPage() {
     if (!canBuild) {
       return;
     }
+
+    setBuildWorkspaceOpen(true);
 
     setBuilding(
       true,
@@ -79,8 +95,17 @@ export default function ApplicationsPage() {
       null,
     );
 
+    setBuildEvents([]);
+
     try {
-      const generated = await generateApplication(request.trim());
+      const generated = await generateApplication(
+        request.trim(),
+        (event) => {
+          setBuildEvents((previous) =>
+            [...previous, event].slice(-150)
+          );
+        },
+      );
       setResult(generated);
     } catch (error) {
       setBuildError(
@@ -92,12 +117,30 @@ export default function ApplicationsPage() {
       setBuilding(
         false,
       );
+      setBuildWorkspaceOpen(false);
     }
   }
 
 
   return (
-    <main className="dw-build-page">
+    <div className={buildWorkspaceOpen ? "dw-builder-split-layout" : undefined}>
+<main className="dw-build-page">
+      {buildWorkspaceOpen && !building && (
+        <div style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          padding: "12px 16px",
+        }}>
+          <button
+            type="button"
+            onClick={returnToRequest}
+            className="dw-build-open-button"
+          >
+            New Request
+          </button>
+        </div>
+      )}
+
       <section
         className="dw-build-page__content"
         aria-labelledby="dw-build-title"
@@ -300,6 +343,67 @@ export default function ApplicationsPage() {
 
 
       </section>
+      {(building || buildEvents.length > 0) && (
+        <section
+          aria-label="Live build activity"
+          style={{
+            margin: "12px",
+            padding: "12px",
+            border: "1px solid var(--border-color, #777)",
+            borderRadius: "8px",
+          }}
+        >
+          <h2 style={{ fontSize: "1rem" }}>
+            Live build activity
+          </h2>
+
+          <ol aria-live="polite">
+            {buildEvents.map((event) => (
+              <li
+                key={`${event.session_id}-${event.sequence}`}
+              >
+                {event.kind.split("_").join(" ")}
+
+                {typeof event.details.path === "string"
+                  ? ` · ${event.details.path}`
+                  : ""}
+
+                {typeof event.details.stage === "string"
+                  ? ` · ${event.details.stage}`
+                  : ""}
+
+                {event.details.success === true
+                  ? " · passed"
+                  : ""}
+
+                {event.details.success === false
+                  ? " · failed"
+                  : ""}
+              </li>
+            ))}
+
+            {building && buildEvents.length === 0 && (
+              <li>
+                Waiting for actual Builder activity…
+              </li>
+            )}
+          </ol>
+
+          <p>
+            Source validation is separate from
+            functional testing and preview.
+          </p>
+        </section>
+      )}
     </main>
+      {buildWorkspaceOpen && (
+      <ApplicationPreview
+        building={building}
+        buildEvents={buildEvents}
+        result={result}
+        buildError={buildError}
+      />
+      )}
+    </div>
   );
 }

@@ -298,15 +298,6 @@ export default function ButtonInterfacePage({
           initialModel?.option_id ?? "automatic",
         );
 
-        setLogs((current) => [
-          createLog(
-            `${result.models.filter(
-              (model) => model.available,
-            ).length} model options loaded`,
-            "success",
-          ),
-          ...current,
-        ]);
       })
       .catch((error: unknown) => {
         if (!isActive) {

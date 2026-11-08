@@ -1,6 +1,15 @@
+"""DataWorc model-driven application generation.
+
+Generates actual Python applications with the registered local model.
+Application Engineering performs compilation, testing, execution,
+repair, and checkpointing. Generated code does not run on the host.
+"""
+
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -8,6 +17,7 @@ from uuid import uuid4
 from engine.application.automatic_model_request_action import (
     process_automatic_model_request,
 )
+from engine.application_generation.build_events import emit_event
 from engine.application_engineering.models import (
     EngineeringPlan,
     PlannedFileChange,
@@ -17,9 +27,7 @@ from engine.application_engineering.models import (
 from engine.application_engineering.runtime import (
     ApplicationEngineeringRuntime,
 )
-from engine.data_engine.record_writer import (
-    DataEngineRecordWriter,
-)
+from engine.data_engine.record_writer import DataEngineRecordWriter
 from engine.tools.file_tools import (
     MANAGED_APPLICATION_ROOT,
     register_managed_workspace,
@@ -27,564 +35,394 @@ from engine.tools.file_tools import (
 )
 
 
+# These scripts belong to DataWorc, not to the generation model.
+# Application Engineering executes them in gVisor.
+CHECK_FILES = {
+    "_dataworc_compile.py": '''
+from pathlib import Path
+
+root = Path(__file__).resolve().parent
+
+for path in sorted(root.rglob("*.py")):
+    if ".git" in path.parts:
+        continue
+
+    compile(
+        path.read_text(encoding="utf-8"),
+        str(path),
+        "exec",
+    )
+
+    print("COMPILED", path.relative_to(root))
+''',
+
+    "_dataworc_test.py": '''
+import sys
+import unittest
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+
+root = Path(__file__).resolve().parent
+sys.path.insert(0, str(root))
+
+suite = unittest.defaultTestLoader.discover(
+    str(root / "tests"),
+    pattern="test_*.py",
+)
+
+if suite.countTestCases() == 0:
+    raise SystemExit("No generated tests found")
+
+result = unittest.TextTestRunner(
+    stream=sys.stdout,
+    verbosity=2,
+).run(suite)
+
+raise SystemExit(0 if result.wasSuccessful() else 1)
+''',
+}
+
+
+# Independent acceptance contract for the first real milestone.
+# This is written by DataWorc; the model cannot rewrite this test.
+FITNESS_ACCEPTANCE = '''
+import json
+import math
+import tempfile
+import unittest
+from pathlib import Path
+
+from tracker import FitnessTracker
+
+
+class DataWorcFitnessAcceptance(unittest.TestCase):
+
+    def test_real_persistence_totals_and_invalid_input(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "fitness.json"
+
+            tracker = FitnessTracker(path)
+
+            tracker.add_activity(3.0, 300.0, 180.0)
+            tracker.add_activity(2.0, 210.0, 179.0)
+
+            self.assertEqual(len(tracker.history()), 2)
+
+            totals = tracker.totals()
+
+            self.assertTrue(
+                math.isclose(totals["distance_miles"], 5.0)
+            )
+
+            self.assertTrue(
+                math.isclose(totals["calories_burned"], 510.0)
+            )
+
+            tracker.save()
+
+            stored = json.loads(
+                path.read_text(encoding="utf-8")
+            )
+
+            self.assertIsInstance(stored, list)
+            self.assertGreaterEqual(len(stored), 6)
+
+            for measurement in stored:
+                self.assertEqual(
+                    set(measurement),
+                    {
+                        "source",
+                        "category",
+                        "data_type",
+                        "value",
+                        "unit",
+                    },
+                )
+
+            restored = FitnessTracker(path)
+            restored.load()
+
+            self.assertEqual(len(restored.history()), 2)
+            self.assertEqual(restored.totals(), totals)
+
+            with self.assertRaises((TypeError, ValueError)):
+                restored.add_activity(-1.0, 20.0, 180.0)
+
+            with self.assertRaises((TypeError, ValueError)):
+                restored.add_activity(1.0, -20.0, 180.0)
+
+            with self.assertRaises((TypeError, ValueError)):
+                restored.add_activity(1.0, 20.0, float("nan"))
+
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+
+
+VALIDATION_STEPS = (
+    (
+        "compile: parse every generated Python file",
+        "python _dataworc_compile.py",
+    ),
+    (
+        "test: generated tests and independent acceptance",
+        "python _dataworc_test.py",
+    ),
+    (
+        "run: application demo executes without input",
+        "python main.py",
+    ),
+)
+
+MAX_FILES = 6
+MAX_REPAIRS = 3
+
+
+def clean_json(text: str) -> dict[str, Any]:
+    text = text.strip()
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+
+        if not lines or lines[-1].strip() != "```":
+            raise ValueError("Incomplete model JSON")
+
+        text = "\n".join(lines[1:-1]).strip()
+
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Model manifest JSON invalid: {text[:280]!r}"
+        ) from exc
+
+    if not isinstance(result, dict):
+        raise ValueError("Manifest must be a JSON object")
+
+    return result
+
+
+def source_path(name: Any) -> str:
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Missing generated file path")
+
+    path = Path(name)
+
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or ".git" in path.parts
+        or any(part.startswith(".") for part in path.parts)
+        or len(path.parts) > 2
+        or (len(path.parts) == 2 and path.parts[0] != "tests")
+        or not name.endswith(".py")
+        or path.name.startswith("_dataworc")
+        or name == "tests/test_dataworc_acceptance.py"
+    ):
+        raise ValueError(
+            f"Unapproved generated file path: {name}"
+        )
+
+    return name
+
+
+def validate_manifest(
+    value: dict[str, Any],
+    *,
+    fitness: bool,
+) -> dict[str, Any]:
+
+    for field in ("application_name", "summary"):
+        if (
+            not isinstance(value.get(field), str)
+            or not value[field].strip()
+        ):
+            raise ValueError(f"Manifest requires {field}")
+
+    planned = value.get("files")
+
+    if (
+        not isinstance(planned, list)
+        or not 2 <= len(planned) <= MAX_FILES
+    ):
+        raise ValueError("Manifest must plan 2-6 source files")
+
+    files: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for item in planned:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("purpose"), str)
+            or not item["purpose"].strip()
+        ):
+            raise ValueError(
+                "Every planned file needs a purpose"
+            )
+
+        name = source_path(item.get("path"))
+
+        if name in seen:
+            raise ValueError(
+                f"Duplicate planned file: {name}"
+            )
+
+        seen.add(name)
+
+        files.append({
+            "path": name,
+            "purpose": item["purpose"].strip(),
+        })
+
+    if "main.py" not in seen:
+        raise ValueError("Manifest requires main.py")
+
+    if not any(
+        name.startswith("tests/test_")
+        for name in seen
+    ):
+        raise ValueError(
+            "Manifest requires tests/test_*.py"
+        )
+
+    if fitness and "tracker.py" not in seen:
+        raise ValueError(
+            "Fitness acceptance requires tracker.py"
+        )
+
+    files.sort(
+        key=lambda item: item["path"].startswith("tests/")
+    )
+
+    return {
+        "application_name": value["application_name"].strip(),
+        "summary": value["summary"].strip(),
+        "files": files,
+    }
+
+
+def clean_source(text: str, path: str) -> str:
+    lines = text.strip().splitlines()
+
+    if lines and lines[0].strip().startswith("```"):
+        if lines[-1].strip() != "```":
+            raise ValueError(
+                f"Incomplete generated source: {path}"
+            )
+
+        lines = lines[1:-1]
+
+    source = "\n".join(lines).strip() + "\n"
+
+    if not source.strip() or len(source) > 60000:
+        raise ValueError(
+            f"Empty or oversized source: {path}"
+        )
+
+    return source
+
+
 class ApplicationGenerationCapability:
     name = "application_generation"
 
-    MAX_REPAIRS = 3
-
     @staticmethod
-    def _parse_json_object(
-        text: str,
-    ) -> dict[str, Any]:
-        cleaned = text.strip()
-
-        if not cleaned:
-            raise ValueError(
-                "Code-generation model "
-                "returned no output."
-            )
-
-        if (
-            cleaned.startswith(
-                "```"
-            )
-            or cleaned.endswith(
-                "```"
-            )
-        ):
-            raise ValueError(
-                "Code-generation model "
-                "returned markdown instead "
-                "of the required JSON object."
-            )
-
-        try:
-            value = json.loads(
-                cleaned
-            )
-        except json.JSONDecodeError as error:
-            # Carry the model's actual output. A parse failure with
-            # no sample is unrepairable.
-            raise ValueError(
-                "Code-generation model "
-                "did not return valid JSON. "
-                f"Received: {cleaned[:400]!r}"
-            ) from error
-
-        if not isinstance(
-            value,
-            dict,
-        ):
-            raise ValueError(
-                "Code-generation result "
-                "must be a JSON object."
-            )
-
-        return value
-
-    @staticmethod
-    def _validate_proposal(
-        proposal: dict[str, Any],
-    ) -> None:
-        files = proposal.get(
-            "files"
-        )
-
-        validation_steps = (
-            proposal.get(
-                "validation_steps"
-            )
-        )
-
-        if (
-            not isinstance(
-                proposal.get(
-                    "application_name"
-                ),
-                str,
-            )
-            or not proposal[
-                "application_name"
-            ].strip()
-        ):
-            raise ValueError(
-                "Generated proposal requires "
-                "application_name."
-            )
-
-        if (
-            not isinstance(
-                proposal.get(
-                    "summary"
-                ),
-                str,
-            )
-            or not proposal[
-                "summary"
-            ].strip()
-        ):
-            raise ValueError(
-                "Generated proposal requires "
-                "summary."
-            )
-
-        if (
-            not isinstance(
-                files,
-                list,
-            )
-            or not files
-        ):
-            raise ValueError(
-                "Generated proposal requires "
-                "at least one complete file."
-            )
-
-        if len(files) > 32:
-            raise ValueError(
-                "Generated proposal contains "
-                "too many files."
-            )
-
-        paths: set[str] = set()
-
-        for file in files:
-            if not isinstance(
-                file,
-                dict,
-            ):
-                raise ValueError(
-                    "Generated file entry "
-                    "must be an object."
-                )
-
-            path = file.get(
-                "path"
-            )
-
-            purpose = file.get(
-                "purpose"
-            )
-
-            content = file.get(
-                "content"
-            )
-
-            if (
-                not isinstance(
-                    path,
-                    str,
-                )
-                or not path.strip()
-            ):
-                raise ValueError(
-                    "Generated file requires "
-                    "a relative path."
-                )
-
-            if Path(path).is_absolute():
-                raise ValueError(
-                    "Generated file path "
-                    "cannot be absolute."
-                )
-
-            if ".." in Path(
-                path
-            ).parts:
-                raise ValueError(
-                    "Generated file path "
-                    "cannot escape workspace."
-                )
-
-            if (
-                ".git"
-                in Path(path).parts
-            ):
-                raise ValueError(
-                    "Generated source cannot "
-                    "write Git internals."
-                )
-
-            if (
-                Path(path).name
-                == ".env"
-                or Path(path).name.startswith(
-                    ".env."
-                )
-            ):
-                raise ValueError(
-                    "Generated source cannot "
-                    "write credential files."
-                )
-
-            if path in paths:
-                raise ValueError(
-                    "Generated proposal contains "
-                    "duplicate file paths."
-                )
-
-            paths.add(path)
-
-            if not isinstance(
-                content,
-                str,
-            ):
-                raise ValueError(
-                    "Generated files require "
-                    "complete text content."
-                )
-
-            if (
-                not isinstance(
-                    purpose,
-                    str,
-                )
-                or not purpose.strip()
-            ):
-                raise ValueError(
-                    "Generated files require "
-                    "a purpose."
-                )
-
-        if (
-            not isinstance(
-                validation_steps,
-                list,
-            )
-            or not validation_steps
-        ):
-            raise ValueError(
-                "Generated proposal requires "
-                "validation steps."
-            )
-
-        stages: set[str] = set()
-
-        for step in (
-            validation_steps
-        ):
-            if not isinstance(
-                step,
-                dict,
-            ):
-                raise ValueError(
-                    "Validation step must "
-                    "be an object."
-                )
-
-            description = (
-                step.get(
-                    "description"
-                )
-            )
-
-            command = step.get(
-                "command"
-            )
-
-            if (
-                not isinstance(
-                    description,
-                    str,
-                )
-                or ":" not in description
-            ):
-                raise ValueError(
-                    "Validation descriptions "
-                    "must begin with a "
-                    "lifecycle stage."
-                )
-
-            stage = (
-                description
-                .split(
-                    ":",
-                    1,
-                )[0]
-                .strip()
-                .lower()
-            )
-
-            if stage not in {
-                "compile",
-                "test",
-                "build",
-                "run",
-            }:
-                raise ValueError(
-                    "Invalid validation stage: "
-                    + stage
-                )
-
-            stages.add(stage)
-
-            if (
-                not isinstance(
-                    command,
-                    str,
-                )
-                or not command.strip()
-            ):
-                raise ValueError(
-                    "Validation step requires "
-                    "an approved command."
-                )
-
-        if "test" not in stages:
-            raise ValueError(
-                "Generated application requires "
-                "a test stage."
-            )
-
-        if "run" not in stages:
-            raise ValueError(
-                "Generated application requires "
-                "a runtime verification stage."
-            )
-
-    @staticmethod
-    def _proposal_prompt(
-        request_text: str,
-    ) -> str:
-        return (
-            "Produce the complete software application "
-            "requested below.\n"
-            "Return ONLY one valid JSON object and no "
-            "markdown or prose outside the JSON.\n\n"
-            "The JSON object must contain:\n"
-            'application_name: non-empty string\n'
-            'summary: non-empty string\n'
-            'files: array of objects containing path, '
-            'purpose, and complete content\n'
-            'validation_steps: array of objects containing '
-            'description and command\n'
-            'risks: array of strings\n\n'
-            "All file paths must be relative to the managed "
-            "application workspace. Do not assume any starter "
-            "files exist. Do not write .git or credential "
-            "environment files. Do not require dependency "
-            "installation during validation. Prefer locally "
-            "available built-in/runtime functionality when "
-            "the requirement permits it.\n\n"
-            "Every validation description must begin with "
-            "compile:, test:, build:, or run:. A test stage "
-            "and run stage are mandatory. The test stage must "
-            "exercise the actual requested behavior. The run "
-            "stage must execute the actual application. "
-            "Commands must be direct commands, not shell "
-            "pipelines or compound shell expressions.\n\n"
-            "SYSTEM REQUEST:\n"
-            + request_text
+    def _record(
+        writer,
+        request_id: str,
+        application_id: str,
+        kind: str,
+        value: dict,
+    ):
+        writer.write(
+            source="application_generation",
+            category="application_generation",
+            data_type=kind,
+            unit="record",
+            value={
+                "request_id": request_id,
+                "application_id": application_id,
+                **value,
+            },
         )
 
     @staticmethod
-    def _repair_prompt(
-        *,
-        request_text: str,
-        failure: dict[str, Any],
-        files: list[dict[str, Any]],
-    ) -> str:
-        return (
-            "Repair the generated application after a real "
-            "Application Engineering failure.\n"
-            "Return ONLY one valid JSON object with the same "
-            "schema as the original generation request: "
-            "application_name, summary, files, "
-            "validation_steps, risks.\n"
-            "Every file entry must contain the COMPLETE "
-            "replacement file content. Do not return partial excerpts.\n\n"
-            "SYSTEM REQUEST:\n"
-            + request_text
-            + "\n\nREAL ENGINEERING FAILURE:\n"
-            + json.dumps(
-                failure,
-                sort_keys=True,
-            )
-            + "\n\nCOMPLETE CURRENT FILES:\n"
-            + json.dumps(
-                files,
-                sort_keys=True,
-            )
-        )
+    def _engineering_plan(
+        manifest,
+        inspection,
+        requirement_id,
+        existing,
+    ):
+        items = manifest["files"] + [
+            {
+                "path": path,
+                "purpose": "DataWorc engineering verification",
+            }
+            for path in CHECK_FILES
+        ]
 
-    @staticmethod
-    def _plan_from_proposal(
-        *,
-        proposal: dict[str, Any],
-        inspection: RepositoryInspection,
-        requirement_id: str,
-        existing_paths: set[str],
-    ) -> EngineeringPlan:
-        planned_changes = tuple(
+        changes = tuple(
             PlannedFileChange(
-                path=str(
-                    item["path"]
-                ),
+                path=item["path"],
                 operation=(
                     "modify"
-                    if (
-                        str(
-                            item["path"]
-                        )
-                        in existing_paths
-                    )
+                    if item["path"] in existing
                     else "create"
                 ),
-                purpose=str(
-                    item["purpose"]
-                ),
+                purpose=item["purpose"],
             )
-            for item
-            in proposal["files"]
+            for item in items
         )
 
-        validation_steps = tuple(
+        validations = tuple(
             ValidationStep(
-                description=str(
-                    item[
-                        "description"
-                    ]
-                ),
-                command=str(
-                    item[
-                        "command"
-                    ]
-                ),
+                description=description,
+                command=command,
             )
-            for item
-            in proposal[
-                "validation_steps"
-            ]
-        )
-
-        risks_raw = proposal.get(
-            "risks",
-            [],
-        )
-
-        risks = tuple(
-            str(item)
-            for item
-            in risks_raw
-            if str(item).strip()
+            for description, command in VALIDATION_STEPS
         )
 
         return EngineeringPlan.create(
-            requirement_id=(
-                requirement_id
+            requirement_id=requirement_id,
+            inspection_id=inspection.inspection_id,
+            summary=manifest["summary"],
+            planned_changes=changes,
+            validation_steps=validations,
+            risks=(
+                "Model-authored tests require independent acceptance.",
             ),
-            inspection_id=(
-                inspection.inspection_id
-            ),
-            summary=str(
-                proposal["summary"]
-            ),
-            planned_changes=(
-                planned_changes
-            ),
-            validation_steps=(
-                validation_steps
-            ),
-            risks=risks,
         )
 
-    @staticmethod
-    def _write_record(
-        writer: DataEngineRecordWriter,
-        *,
-        data_type: str,
-        request_id: str,
-        application_id: str,
-        value: dict[str, Any],
-    ) -> None:
-        writer.write(
-            source=(
-                "application_generation"
-            ),
-            category=(
-                "application_generation"
-            ),
-            data_type=data_type,
-            value={
-                "request_id": (
-                    request_id
-                ),
-                "application_id": (
-                    application_id
-                ),
-                **value,
-            },
-            unit="record",
-        )
+    def execute(self, request, instance) -> dict:
+        permissions = instance.definition.permissions
 
-    def execute(
-        self,
-        request,
-        instance,
-    ) -> dict:
         if not (
-            instance.definition
-            .permissions
-            .write_records
+            permissions.write_records
+            and permissions.run_approved_commands
         ):
             return {
                 "capability": self.name,
-                "source": (
-                    "application_generation"
-                ),
+                "source": self.name,
                 "status": "rejected",
                 "answer": (
-                    "Application Generation "
-                    "requires Data Engine "
-                    "write permission."
+                    "Application Engineering requires approved "
+                    "command and record-write permissions."
                 ),
                 "data": {},
-                "errors": [
-                    "write_records is false"
-                ],
+                "errors": ["required permissions not granted"],
             }
 
-        if not (
-            instance.definition
-            .permissions
-            .run_approved_commands
-        ):
-            return {
-                "capability": self.name,
-                "source": (
-                    "application_generation"
-                ),
-                "status": "rejected",
-                "answer": (
-                    "Application Generation "
-                    "requires approved command "
-                    "execution."
-                ),
-                "data": {},
-                "errors": [
-                    "run_approved_commands "
-                    "is false"
-                ],
-            }
-
-        project_root = (
-            Path(__file__)
-            .resolve()
-            .parents[2]
-        )
+        root = Path(__file__).resolve().parents[2]
 
         application_id = (
-            "application-"
-            + uuid4().hex[:12]
+            "application-" + uuid4().hex[:12]
         )
 
         workspace = (
             MANAGED_APPLICATION_ROOT
             / application_id
-            / (
-                "task-"
-                + uuid4().hex
-            )
+            / ("task-" + uuid4().hex)
         )
 
         workspace.mkdir(
@@ -592,217 +430,292 @@ class ApplicationGenerationCapability:
             exist_ok=False,
         )
 
-        writer = (
-            DataEngineRecordWriter()
+        writer = DataEngineRecordWriter()
+        workspace_id = register_managed_workspace(workspace)
+
+        changed: set[str] = set()
+        model_calls: list[dict[str, Any]] = []
+
+        text = request.question.strip()
+
+        # Select only the independent acceptance contract.
+        # This does not select a model or application template.
+        fitness = all(
+            term in text.lower()
+            for term in ("calori", "mile", "weight")
         )
 
-        workspace_id = (
-            register_managed_workspace(
-                workspace
-            )
-        )
-
-        changed_paths: set[str] = (
-            set()
-        )
-
-        try:
-            self._write_record(
+        def record(kind: str, **data):
+            self._record(
                 writer,
-                data_type=(
-                    "application_generation_request"
-                ),
-                request_id=(
-                    request.request_id
-                ),
-                application_id=(
-                    application_id
-                ),
-                value={
-                    "question": (
-                        request.question
-                    ),
-                    "route": (
-                        "application_generation"
-                    ),
-                    "workspace": str(
-                        workspace
-                    ),
-                },
+                request.request_id,
+                application_id,
+                kind,
+                data,
             )
 
-            initial_list = (
-                instance.execute_tool(
-                    "list_files",
-                    {
-                        "workspace_id": (
-                            workspace_id
-                        ),
-                        "path": ".",
-                        "recursive": True,
-                    },
-                )
+        def progress(kind: str, **details):
+            emit_event(
+                kind,
+                application_id=application_id,
+                **details,
             )
 
-            if (
-                initial_list.get(
-                    "count"
-                )
-                != 0
-            ):
-                raise RuntimeError(
-                    "New application workspace "
-                    "was not empty."
-                )
-
-            inspection = (
-                RepositoryInspection.create(
-                    requirement_id=(
-                        request.request_id
-                    ),
-                    repository_root=str(
-                        workspace
-                    ),
-                    inspected_paths=(
-                        ".",
-                    ),
-                    findings=(
-                        "workspace.initially_empty=true",
-                    ),
-                )
+        def ask(stage: str, prompt: str) -> str:
+            progress(
+                "model_step_started",
+                stage=stage,
             )
 
-            self._write_record(
-                writer,
-                data_type=(
-                    "project_inspection"
-                ),
-                request_id=(
-                    request.request_id
-                ),
-                application_id=(
-                    application_id
-                ),
-                value=(
-                    inspection.to_dict()
-                ),
+            started = time.monotonic()
+
+            result = process_automatic_model_request(
+                question=prompt,
+                required_capability="code_generation",
+                request_id=request.request_id,
             )
 
-            model_result = (
-                process_automatic_model_request(
-                    question=(
-                        self._proposal_prompt(
-                            request.question
-                        )
-                    ),
-                    required_capability=(
-                        "code_generation"
-                    ),
-                    request_id=(
-                        request.request_id
-                    ),
-                )
-            )
+            raw = result.get("raw") or {}
 
-            raw = model_result.get(
-                "raw",
-                {},
-            )
-
-            if not isinstance(
-                raw,
-                dict,
-            ):
+            if not isinstance(raw, dict):
                 raw = {}
 
-            selection = raw.get(
-                "selection",
-                {},
+            metadata = raw.get("metadata") or {}
+
+            if not isinstance(metadata, dict):
+                metadata = {}
+
+            answer = str(result.get("answer") or "")
+
+            if not answer.strip():
+                raise ValueError(
+                    f"Model returned empty output: {stage}"
+                )
+
+            reason = metadata.get("done_reason")
+
+            if reason is not None and reason != "stop":
+                raise ValueError(
+                    f"Model output incomplete: {stage}: {reason}"
+                )
+
+            details = {
+                "stage": stage,
+                "provider_id": raw.get("provider_id"),
+                "model_id": raw.get("model_id"),
+                "processing_location": raw.get(
+                    "processing_location"
+                ),
+                "model_selection": raw.get("selection"),
+                "output_sha256": hashlib.sha256(
+                    answer.encode("utf-8")
+                ).hexdigest(),
+                "output_length": len(answer),
+                "done_reason": reason,
+                "generation_profile": metadata.get(
+                    "generation_profile"
+                ),
+                "elapsed_seconds": round(
+                    time.monotonic() - started,
+                    2,
+                ),
+            }
+
+            record("model_call", **details)
+            model_calls.append(details)
+
+            progress(
+                "model_step_finished",
+                stage=stage,
+                model_id=raw.get("model_id"),
             )
 
-            if not isinstance(
-                selection,
-                dict,
-            ):
-                selection = {}
+            return answer
 
-            self._write_record(
-                writer,
-                data_type=(
-                    "model_selection"
-                ),
-                request_id=(
-                    request.request_id
-                ),
-                application_id=(
-                    application_id
-                ),
-                value={
-                    "required_capability": (
-                        "code_generation"
-                    ),
-                    "selection": (
-                        selection
-                    ),
-                    "provider_id": (
-                        raw.get(
-                            "provider_id"
-                        )
-                    ),
-                    "model_id": (
-                        raw.get(
-                            "model_id"
-                        )
-                    ),
+        def write(
+            path: str,
+            contents: str,
+            plan_id: str,
+        ):
+            result = instance.execute_tool(
+                "write_files",
+                {
+                    "workspace_id": workspace_id,
+                    "files": [
+                        {
+                            "path": path,
+                            "content": contents,
+                        }
+                    ],
                 },
             )
 
-            proposal = (
-                self._parse_json_object(
-                    str(
-                        model_result.get(
-                            "answer",
-                            "",
-                        )
-                    )
+            files = result.get("files", [])
+
+            if (
+                not isinstance(files, list)
+                or not any(
+                    item.get("path") == path
+                    for item in files
                 )
-            )
-
-            self._validate_proposal(
-                proposal
-            )
-
-            current_paths: set[str] = (
-                set()
-            )
-
-            plan = (
-                self._plan_from_proposal(
-                    proposal=proposal,
-                    inspection=inspection,
-                    requirement_id=(
-                        request.request_id
-                    ),
-                    existing_paths=(
-                        current_paths
-                    ),
+            ):
+                raise RuntimeError(
+                    f"File tool did not confirm write: {path}"
                 )
+
+            target = (
+                workspace / path
+            ).resolve(strict=True)
+
+            if (
+                not target.is_file()
+                or not target.is_relative_to(workspace)
+            ):
+                raise RuntimeError(
+                    f"Generated file unavailable: {path}"
+                )
+
+            digest = hashlib.sha256(
+                target.read_bytes()
+            ).hexdigest()
+
+            expected = hashlib.sha256(
+                contents.encode("utf-8")
+            ).hexdigest()
+
+            if digest != expected:
+                raise RuntimeError(
+                    f"File write/readback mismatch: {path}"
+                )
+
+            changed.add(path)
+
+            record(
+                "code_change",
+                path=path,
+                sha256=digest,
+                plan_id=plan_id,
             )
 
-            engineering = (
-                ApplicationEngineeringRuntime(
-                    project_root=(
-                        project_root
-                    ),
-                    workspace=workspace,
-                    application_id=(
-                        application_id
-                    ),
-                    requirement_id=(
-                        request.request_id
-                    ),
-                    writer=writer,
+            progress(
+                "file_written",
+                path=path,
+                sha256=digest,
+            )
+
+        try:
+            record(
+                "application_generation_request",
+                question=text,
+                workspace=str(workspace),
+            )
+
+            progress("project_created")
+
+            initial = instance.execute_tool(
+                "list_files",
+                {
+                    "workspace_id": workspace_id,
+                    "path": ".",
+                    "recursive": True,
+                },
+            )
+
+            if initial.get("count") != 0:
+                raise RuntimeError(
+                    "New managed workspace is not empty"
                 )
+
+            inspection = RepositoryInspection.create(
+                requirement_id=request.request_id,
+                repository_root=str(workspace),
+                inspected_paths=(".",),
+                findings=(
+                    "workspace.initially_empty=true",
+                ),
+            )
+
+            record(
+                "project_inspection",
+                **inspection.to_dict(),
+            )
+
+            acceptance_contract = (
+                "For fitness acceptance, include tracker.py. "
+                "It must export FitnessTracker(path) with methods "
+                "add_activity(distance_miles, calories_burned, weight_lbs), "
+                "history(), totals(), save(), and load(). "
+                "totals() must return distance_miles and calories_burned. "
+                "Reject invalid, negative, and non-finite values. "
+                "save() must write a JSON array containing exactly "
+                "source, category, data_type, value, and unit "
+                "for each measurement. "
+                if fitness
+                else ""
+            )
+
+            rules = (
+                "Use Python 3.12 standard library only. "
+                "No network or package installations. "
+                "main.py must run without arguments, demonstrate "
+                "the requested functionality using a temporary "
+                "directory, print its result, and exit successfully. "
+                "Create unittest tests in tests/test_*.py that "
+                "exercise real application behavior. "
+                + acceptance_contract
+            )
+
+            manifest_prompt = (
+                "Plan a functional Python application. "
+                "Return ONLY one JSON object with application_name, "
+                "summary, and files. "
+                "files must contain 2 to 6 objects with path and purpose. "
+                "Use .py files at the top level or tests/test_*.py. "
+                "Include main.py and at least one test file. "
+                "Do not include file contents in the manifest. "
+                + rules
+                + "\nUSER REQUEST:\n"
+                + text
+            )
+
+            manifest = validate_manifest(
+                clean_json(
+                    ask("manifest", manifest_prompt)
+                ),
+                fitness=fitness,
+            )
+
+            record(
+                "application_manifest",
+                **manifest,
+            )
+
+            plan_files = list(manifest["files"])
+
+            if fitness:
+                plan_files.append({
+                    "path": "tests/test_dataworc_acceptance.py",
+                    "purpose": "Independent acceptance tests",
+                })
+
+            proposal = {
+                **manifest,
+                "files": plan_files,
+            }
+
+            plan = self._engineering_plan(
+                proposal,
+                inspection,
+                request.request_id,
+                set(),
+            )
+
+            engineering = ApplicationEngineeringRuntime(
+                project_root=root,
+                workspace=workspace,
+                application_id=application_id,
+                requirement_id=request.request_id,
+                writer=writer,
             )
 
             engineering.validate_plan(
@@ -810,670 +723,356 @@ class ApplicationGenerationCapability:
                 inspection=inspection,
             )
 
-            self._write_record(
-                writer,
-                data_type=(
-                    "engineering_plan"
-                ),
-                request_id=(
-                    request.request_id
-                ),
-                application_id=(
-                    application_id
-                ),
-                value=(
-                    plan.to_dict()
-                ),
+            record(
+                "engineering_plan",
+                **plan.to_dict(),
             )
 
-            write_result = (
-                instance.execute_tool(
-                    "write_files",
-                    {
-                        "workspace_id": (
-                            workspace_id
-                        ),
-                        "files": [
-                            {
-                                "path": str(
-                                    item[
-                                        "path"
-                                    ]
-                                ),
-                                "content": str(
-                                    item[
-                                        "content"
-                                    ]
-                                ),
-                            }
-                            for item
-                            in proposal[
-                                "files"
-                            ]
-                        ],
-                    },
+            # Install deterministic checks before model-generated code.
+            for path, code in CHECK_FILES.items():
+                write(
+                    path,
+                    code,
+                    plan.plan_id,
                 )
+
+            if fitness:
+                write(
+                    "tests/test_dataworc_acceptance.py",
+                    FITNESS_ACCEPTANCE,
+                    plan.plan_id,
+                )
+
+            written: dict[str, str] = {}
+
+            # Each file receives its own real local model call.
+            for item in manifest["files"]:
+                path = item["path"]
+
+                relevant = "\n".join(
+                    f"{name}:\n{source[:1200]}"
+                    for name, source in list(written.items())[-2:]
+                )[-2400:]
+
+                role = (
+                    "Entry point only: import the application and run a demo."
+                    if path == "main.py" else
+                    "Data model and persistence only."
+                    if path == "tracker.py" else
+                    "Unittest assertions only; import existing modules."
+                    if path.startswith("tests/") else
+                    item["purpose"]
+                )
+
+                contract = acceptance_contract if fitness else rules
+
+                prompt = (
+                    f"Generate ONLY complete Python 3.12 source for {path}. "
+                    "No markdown, commentary, duplicated modules or long docstrings. "
+                    "Keep the implementation concise; target under 1800 output tokens. "
+                    f"Responsibility: {role}\n"
+                    f"Required behavior: {text[:1800]}\n"
+                    f"Contract: {contract[:1600]}\n"
+                    "Planned paths: "
+                    + ", ".join(f["path"] for f in manifest["files"])
+                    + "\nRelevant existing code:\n" + relevant
+                )
+
+                for attempt in (1, 2):
+                    try:
+                        result = ask(f"file:{path}:attempt:{attempt}", prompt)
+                        contents = clean_source(result, path)
+                        compile(contents, path, "exec")
+                        break
+                    except Exception as error:
+                        message = str(error).lower()
+                        recoverable = (
+                            "configured output limit" in message
+                            or isinstance(error, SyntaxError)
+                            or "incomplete generated source" in message
+                        )
+                        if attempt == 2 or not recoverable:
+                            raise
+
+                        record(
+                            "generation_retry",
+                            path=path,
+                            attempt=attempt,
+                            reason=str(error)[:240],
+                        )
+
+                        prompt += (
+                            "\nRETRY: complete this ONE file using fewer "
+                            "than 1200 output tokens. Reuse imports; "
+                            "omit nonessential text; preserve behavior."
+                        )
+
+                write(
+                    path,
+                    contents,
+                    plan.plan_id,
+                )
+
+                written[path] = contents
+
+            progress(
+                "validation_started",
+                stage="engineering",
             )
 
-            for item in (
-                write_result.get(
-                    "files",
-                    []
-                )
-            ):
-                path = str(
-                    item.get(
-                        "path",
-                        "",
-                    )
-                )
-
-                if (
-                    path
-                    and item.get(
-                        "changed"
-                    )
-                ):
-                    changed_paths.add(
-                        path
-                    )
-
-                self._write_record(
-                    writer,
-                    data_type=(
-                        "code_change"
-                    ),
-                    request_id=(
-                        request.request_id
-                    ),
-                    application_id=(
-                        application_id
-                    ),
-                    value={
-                        "plan_id": (
-                            plan.plan_id
-                        ),
-                        **item,
-                    },
-                )
-
-            generated_paths = sorted(
-                changed_paths
-            )
-
-            for start in range(
-                0,
-                len(
-                    generated_paths
-                ),
-                16,
-            ):
-                read_result = (
-                    instance.execute_tool(
-                        "read_files",
-                        {
-                            "workspace_id": (
-                                workspace_id
-                            ),
-                            "paths": (
-                                generated_paths[
-                                    start:
-                                    start + 16
-                                ]
-                            ),
-                        },
-                    )
-                )
-
-                self._write_record(
-                    writer,
-                    data_type=(
-                        "tool_execution"
-                    ),
-                    request_id=(
-                        request.request_id
-                    ),
-                    application_id=(
-                        application_id
-                    ),
-                    value={
-                        "tool": (
-                            "read_files"
-                        ),
-                        "file_count": (
-                            read_result.get(
-                                "file_count",
-                                0,
-                            )
-                        ),
-                        "files": [
-                            {
-                                "path": (
-                                    item.get(
-                                        "path"
-                                    )
-                                ),
-                                "bytes": (
-                                    item.get(
-                                        "bytes"
-                                    )
-                                ),
-                                "sha256": (
-                                    item.get(
-                                        "sha256"
-                                    )
-                                ),
-                            }
-                            for item
-                            in read_result.get(
-                                "files",
-                                [],
-                            )
-                        ],
-                    },
-                )
-
-            engineering_result = (
-                engineering.execute(
-                    plan=plan,
-                    inspection=inspection,
-                )
+            result = engineering.execute(
+                plan=plan,
+                inspection=inspection,
             )
 
             repairs = 0
 
+            # Repair a failed real compile/test/run operation.
             while (
-                not engineering_result[
-                    "success"
-                ]
-                and repairs
-                < self.MAX_REPAIRS
+                not result["success"]
+                and repairs < MAX_REPAIRS
             ):
                 repairs += 1
 
-                list_result = (
-                    instance.execute_tool(
-                        "list_files",
-                        {
-                            "workspace_id": (
-                                workspace_id
-                            ),
-                            "path": ".",
-                            "recursive": True,
-                        },
-                    )
+                failure = (
+                    result.get("failed_result") or {}
                 )
 
-                current_paths = {
-                    str(
-                        item["path"]
-                    )
-                    for item
-                    in list_result.get(
-                        "entries",
-                        [],
-                    )
-                    if (
-                        item.get(
-                            "type"
-                        )
-                        == "file"
-                    )
-                }
-
-                complete_files: list[
-                    dict[str, Any]
-                ] = []
-
-                ordered_paths = sorted(
-                    current_paths
+                repair_prompt = (
+                    "Fix the real engineering failure by rewriting "
+                    "exactly one previously planned source file. "
+                    "Return PATH: <file> on the first line, followed "
+                    "by the complete corrected Python source. "
+                    "Do not modify DataWorc engineering scripts or "
+                    "tests/test_dataworc_acceptance.py. "
+                    "\nFAILURE:\n"
+                    + json.dumps(
+                        failure,
+                        default=str,
+                    )[-4500:]
+                    + "\nCURRENT FILES:\n"
+                    + "\n".join(
+                        f"### {name}\n{contents[:4000]}"
+                        for name, contents in written.items()
+                    )[-15000:]
+                    + "\n"
+                    + rules
                 )
 
-                for start in range(
-                    0,
-                    len(
-                        ordered_paths
-                    ),
-                    16,
+                response = ask(
+                    "repair:" + str(repairs),
+                    repair_prompt,
+                )
+
+                first, separator, rest = (
+                    response.partition("\n")
+                )
+
+                if (
+                    not separator
+                    or not first.startswith("PATH: ")
                 ):
-                    batch = (
-                        instance.execute_tool(
-                            "read_files",
-                            {
-                                "workspace_id": (
-                                    workspace_id
-                                ),
-                                "paths": (
-                                    ordered_paths[
-                                        start:
-                                        start + 16
-                                    ]
-                                ),
-                            },
-                        )
+                    raise ValueError(
+                        "Repair must begin with PATH: <file>"
                     )
 
-                    complete_files.extend(
-                        batch.get(
-                            "files",
-                            [],
-                        )
-                    )
-
-                repair_model_result = (
-                    process_automatic_model_request(
-                        question=(
-                            self._repair_prompt(
-                                request_text=(
-                                    request.question
-                                ),
-                                failure=(
-                                    engineering_result
-                                ),
-                                files=(
-                                    complete_files
-                                ),
-                            )
-                        ),
-                        required_capability=(
-                            "code_generation"
-                        ),
-                        request_id=(
-                            request.request_id
-                        ),
-                    )
+                repair_path = source_path(
+                    first[6:].strip()
                 )
 
-                repair_proposal = (
-                    self._parse_json_object(
-                        str(
-                            repair_model_result.get(
-                                "answer",
-                                "",
-                            )
-                        )
+                if repair_path not in written:
+                    raise ValueError(
+                        "Repair attempted unplanned file: "
+                        + repair_path
                     )
-                )
 
-                self._validate_proposal(
-                    repair_proposal
+                repaired = clean_source(
+                    rest,
+                    repair_path,
                 )
 
                 repair_inspection = (
                     RepositoryInspection.create(
-                        requirement_id=(
-                            request.request_id
-                        ),
-                        repository_root=str(
-                            workspace
-                        ),
-                        inspected_paths=(
-                            tuple(
-                                ordered_paths
-                            )
-                            if ordered_paths
-                            else (
-                                ".",
-                            )
+                        requirement_id=request.request_id,
+                        repository_root=str(workspace),
+                        inspected_paths=tuple(
+                            sorted(changed)
                         ),
                         findings=(
-                            (
-                                "repair_attempt="
-                                + str(
-                                    repairs
-                                )
-                            ),
+                            f"repair_attempt={repairs}",
                         ),
                     )
                 )
 
-                repair_plan = (
-                    self._plan_from_proposal(
-                        proposal=(
-                            repair_proposal
-                        ),
-                        inspection=(
-                            repair_inspection
-                        ),
-                        requirement_id=(
-                            request.request_id
-                        ),
-                        existing_paths=(
-                            current_paths
-                        ),
-                    )
+                repair_plan = self._engineering_plan(
+                    proposal,
+                    repair_inspection,
+                    request.request_id,
+                    set(changed),
                 )
 
                 engineering.validate_plan(
                     plan=repair_plan,
-                    inspection=(
-                        repair_inspection
-                    ),
+                    inspection=repair_inspection,
                 )
 
-                self._write_record(
-                    writer,
-                    data_type=(
-                        "repair_result"
-                    ),
-                    request_id=(
-                        request.request_id
-                    ),
-                    application_id=(
-                        application_id
-                    ),
-                    value={
-                        "repair_attempt": (
-                            repairs
-                        ),
-                        "previous_failure": (
-                            engineering_result
-                        ),
-                        "repair_plan": (
-                            repair_plan.to_dict()
-                        ),
-                    },
+                write(
+                    repair_path,
+                    repaired,
+                    repair_plan.plan_id,
                 )
 
-                repair_write = (
-                    instance.execute_tool(
-                        "write_files",
-                        {
-                            "workspace_id": (
-                                workspace_id
-                            ),
-                            "files": [
-                                {
-                                    "path": str(
-                                        item[
-                                            "path"
-                                        ]
-                                    ),
-                                    "content": str(
-                                        item[
-                                            "content"
-                                        ]
-                                    ),
-                                }
-                                for item
-                                in repair_proposal[
-                                    "files"
-                                ]
-                            ],
-                        },
-                    )
+                record(
+                    "repair_result",
+                    attempt=repairs,
+                    path=repair_path,
+                    failure=failure,
                 )
 
-                for item in (
-                    repair_write.get(
-                        "files",
-                        []
-                    )
-                ):
-                    if item.get(
-                        "changed"
-                    ):
-                        changed_paths.add(
-                            str(
-                                item[
-                                    "path"
-                                ]
-                            )
-                        )
-
-                repair_paths = sorted(
-                    {
-                        str(
-                            item[
-                                "path"
-                            ]
-                        )
-                        for item
-                        in repair_proposal[
-                            "files"
-                        ]
-                    }
-                )
-
-                for start in range(
-                    0,
-                    len(
-                        repair_paths
-                    ),
-                    16,
-                ):
-                    instance.execute_tool(
-                        "read_files",
-                        {
-                            "workspace_id": (
-                                workspace_id
-                            ),
-                            "paths": (
-                                repair_paths[
-                                    start:
-                                    start + 16
-                                ]
-                            ),
-                        },
-                    )
+                written[repair_path] = repaired
 
                 plan = repair_plan
-                inspection = (
-                    repair_inspection
+                inspection = repair_inspection
+
+                progress(
+                    "validation_started",
+                    stage="engineering",
+                    repair_attempt=repairs,
                 )
 
-                engineering_result = (
-                    engineering.execute(
-                        plan=plan,
-                        inspection=inspection,
-                    )
+                result = engineering.execute(
+                    plan=plan,
+                    inspection=inspection,
                 )
 
-            if not engineering_result[
-                "success"
-            ]:
-                self._write_record(
-                    writer,
-                    data_type=(
-                        "application_generation_result"
-                    ),
-                    request_id=(
-                        request.request_id
-                    ),
-                    application_id=(
-                        application_id
-                    ),
-                    value={
-                        "status": "failed",
-                        "workspace": str(
-                            workspace
-                        ),
-                        "repairs": repairs,
-                        "engineering_result": (
-                            engineering_result
-                        ),
-                    },
+            progress(
+                "validation_recorded",
+                stage="engineering",
+                success=result["success"],
+            )
+
+            if not result["success"]:
+                record(
+                    "application_generation_result",
+                    status="failed",
+                    engineering_result=result,
                 )
 
                 return {
                     "capability": self.name,
-                    "source": (
-                        "application_engineering"
-                    ),
+                    "source": "application_engineering",
                     "status": "error",
                     "answer": (
-                        "Application Generation "
-                        "did not pass the required "
-                        "engineering verification."
+                        "Generated application failed "
+                        "real engineering verification."
                     ),
                     "data": {
-                        "application_id": (
-                            application_id
-                        ),
-                        "workspace": str(
-                            workspace
-                        ),
-                        "repair_attempts": (
-                            repairs
-                        ),
-                        "engineering_result": (
-                            engineering_result
-                        ),
+                        "application_id": application_id,
+                        "workspace": str(workspace),
+                        "engineering_result": result,
+                        "repair_attempts": repairs,
                     },
                     "errors": [
-                        "engineering verification "
-                        "failed"
+                        "gVisor engineering checks failed"
+                    ],
+                }
+
+            # Model-written tests are insufficient for a claim of
+            # complete functionality without independent acceptance.
+            if not fitness:
+                record(
+                    "application_generation_result",
+                    status="needs_independent_acceptance",
+                )
+
+                return {
+                    "capability": self.name,
+                    "source": "application_engineering",
+                    "status": "partial",
+                    "answer": (
+                        "Generated source passed sandbox checks, "
+                        "but independent requirements acceptance "
+                        "is still pending."
+                    ),
+                    "data": {
+                        "application_id": application_id,
+                        "workspace": str(workspace),
+                        "engineering_result": result,
+                        "files": sorted(changed),
+                    },
+                    "errors": [
+                        "independent acceptance contract unavailable"
                     ],
                 }
 
             checkpoint = (
-                engineering
-                .create_verified_checkpoint(
-                    changed_paths=(
-                        sorted(
-                            changed_paths
-                        )
-                    ),
+                engineering.create_verified_checkpoint(
+                    changed_paths=sorted(changed),
                     verification_passed=True,
-                    plan_id=(
-                        plan.plan_id
-                    ),
+                    plan_id=plan.plan_id,
                 )
             )
 
-            final_value = {
-                "status": "succeeded",
-                "workspace": str(
-                    workspace
-                ),
-                "application_name": (
-                    proposal.get(
-                        "application_name"
-                    )
-                ),
-                "changed_paths": sorted(
-                    changed_paths
-                ),
-                "repair_attempts": (
-                    repairs
-                ),
-                "engineering_result": (
-                    engineering_result
-                ),
-                "checkpoint": (
-                    checkpoint
-                ),
-                "model_selection": (
-                    selection
-                ),
-            }
-
-            self._write_record(
-                writer,
-                data_type=(
-                    "application_generation_result"
-                ),
-                request_id=(
-                    request.request_id
-                ),
-                application_id=(
-                    application_id
-                ),
-                value=final_value,
+            record(
+                "application_generation_result",
+                status="succeeded",
+                workspace=str(workspace),
+                engineering_result=result,
+                checkpoint=checkpoint,
+                files=sorted(changed),
             )
 
             return {
                 "capability": self.name,
-                "source": (
-                    "application_engineering"
-                ),
+                "source": "application_engineering",
                 "status": "success",
                 "answer": (
-                    "The software application "
-                    "was generated, verified, "
-                    "and checkpointed."
+                    "Fitness application generated and "
+                    "independently tested in gVisor."
                 ),
                 "data": {
-                    "action": (
-                        "Generated and verified "
-                        "software."
-                    ),
-                    "explanation": (
-                        "The Intelligence Runtime "
-                        "routed the request to "
-                        "Application Generation. "
-                        "Application Engineering "
-                        "planned, generated, tested, "
-                        "ran, repaired when needed, "
-                        "and checkpointed the "
-                        "verified result."
-                    ),
-                    "next_step": (
-                        "Inspect or release the "
-                        "verified application."
-                    ),
-                    "application_id": (
-                        application_id
-                    ),
-                    **final_value,
+                    "status": "succeeded",
+                    "application_id": application_id,
+                    "workspace": str(workspace),
+                    "application_name": manifest[
+                        "application_name"
+                    ],
+                    "changed_paths": sorted(changed),
+                    "engineering_result": result,
+                    "checkpoint": checkpoint,
+                    "model_calls": model_calls,
+                    "repair_attempts": repairs,
+                    "independent_acceptance": True,
                 },
                 "errors": [],
             }
 
         except Exception as error:
             try:
-                self._write_record(
-                    writer,
-                    data_type=(
-                        "application_generation_result"
-                    ),
-                    request_id=(
-                        request.request_id
-                    ),
-                    application_id=(
-                        application_id
-                    ),
-                    value={
-                        "status": "error",
-                        "workspace": str(
-                            workspace
-                        ),
-                        "error": str(
-                            error
-                        ),
-                    },
+                record(
+                    "application_generation_result",
+                    status="error",
+                    error=str(error),
                 )
             except Exception:
                 pass
 
             return {
                 "capability": self.name,
-                "source": (
-                    "application_generation"
-                ),
+                "source": self.name,
                 "status": "error",
                 "answer": (
-                    "Application Generation "
-                    "could not complete the "
-                    "engineering lifecycle."
+                    "Application Generation could not "
+                    "finish verification."
                 ),
                 "data": {
-                    "application_id": (
-                        application_id
-                    ),
-                    "workspace": str(
-                        workspace
-                    ),
-                    "error": str(
-                        error
-                    ),
+                    "application_id": application_id,
+                    "workspace": str(workspace),
+                    "error": str(error),
+                    "model_calls": model_calls,
                 },
-                "errors": [
-                    str(error)
-                ],
+                "errors": [str(error)],
             }
 
         finally:
-            release_managed_workspace(
-                workspace_id
-            )
+            release_managed_workspace(workspace_id)

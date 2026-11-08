@@ -1,7 +1,8 @@
 use crate::application_builder::{ApplicationBuildResult, BuildPhase};
 use serde_json::Value;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
+use tauri::ipc::Channel;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -116,7 +117,112 @@ fn read_limited(path: &Path) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|e| e.to_string())
 }
 
-fn call_python(root: &Path, request: &str) -> Result<Value, String> {
+fn call_python(
+    root: &Path,
+    request: &str,
+) -> Result<Value, String> {
+    call_python_stream(root, request, None)
+}
+
+
+const EVENT_PREFIX: &[u8] = b"DATAWORC_BUILD_EVENT:";
+const MAX_EVENT_LINE: usize = 64 * 1024;
+
+/// Read only the newly appended bytes from Python's stderr file.
+fn forward_progress(
+    path: &Path,
+    cursor: &mut u64,
+    pending: &mut Vec<u8>,
+    last_sequence: &mut u64,
+    session: &str,
+    channel: &Channel<Value>,
+) -> Result<(), String> {
+    let length = fs::metadata(path)
+        .map_err(|e| format!("Progress file unavailable: {e}"))?
+        .len();
+
+    if length > OUTPUT_LIMIT || length < *cursor {
+        return Err(
+            "Builder diagnostics exceeded limit or were truncated".into()
+        );
+    }
+
+    if length == *cursor {
+        return Ok(());
+    }
+
+    let mut file = File::open(path)
+        .map_err(|e| e.to_string())?;
+
+    file.seek(SeekFrom::Start(*cursor))
+        .map_err(|e| e.to_string())?;
+
+    let mut chunk =
+        vec![0u8; ((length - *cursor).min(65536)) as usize];
+
+    let count = file.read(&mut chunk)
+        .map_err(|e| e.to_string())?;
+
+    if count == 0 {
+        return Err(
+            "Builder progress stream made no forward progress".into()
+        );
+    }
+
+    *cursor += count as u64;
+    pending.extend_from_slice(&chunk[..count]);
+
+    while let Some(index) =
+        pending.iter().position(|byte| *byte == b'\n')
+    {
+        let line: Vec<u8> = pending.drain(..=index).collect();
+        let trimmed = &line[..line.len() - 1];
+
+        if !trimmed.starts_with(EVENT_PREFIX) {
+            continue;
+        }
+
+        let event: Value = serde_json::from_slice(
+            &trimmed[EVENT_PREFIX.len()..]
+        ).map_err(|e| format!("Malformed Builder progress: {e}"))?;
+
+        let sequence = event
+            .get("sequence")
+            .and_then(Value::as_u64)
+            .ok_or("Builder event sequence missing")?;
+
+        if event.get("session_id").and_then(Value::as_str)
+            != Some(session)
+            || sequence != *last_sequence + 1
+            || event.get("kind").and_then(Value::as_str).is_none()
+            || !event.get("details").is_some_and(Value::is_object)
+        {
+            return Err(
+                "Builder event session, schema or sequence mismatch".into()
+            );
+        }
+
+        *last_sequence = sequence;
+
+        channel.send(event).map_err(|e| {
+            format!("Builder progress delivery failed: {e}")
+        })?;
+    }
+
+    if pending.len() > MAX_EVENT_LINE {
+        return Err(
+            "Builder produced an oversized event line".into()
+        );
+    }
+
+    Ok(())
+}
+
+fn call_python_stream(
+    root: &Path,
+    request: &str,
+    stream: Option<(&str, &Channel<Value>)>,
+) -> Result<Value, String> {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -146,6 +252,10 @@ fn call_python(root: &Path, request: &str) -> Result<Value, String> {
             .current_dir(root)
             .env("PYTHONPATH", root)
             .env("PYTHONUNBUFFERED", "1")
+            .env(
+                "DATAWORC_BUILD_SESSION_ID",
+                stream.map(|(id, _)| id).unwrap_or(""),
+            )
             .arg("-m")
             .arg("engine.application_generation.builder")
             .arg("--project-root")
@@ -158,7 +268,26 @@ fn call_python(root: &Path, request: &str) -> Result<Value, String> {
             .spawn()
             .map_err(|e| format!("Could not start Python Builder: {e}"))?;
 
+        let mut cursor = 0u64;
+        let mut pending = Vec::new();
+        let mut last_sequence = 0u64;
+
         let status = loop {
+            if let Some((id, channel)) = stream {
+                if let Err(error) = forward_progress(
+                    &stderr_path,
+                    &mut cursor,
+                    &mut pending,
+                    &mut last_sequence,
+                    id,
+                    channel,
+                ) {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error);
+                }
+            }
+
             match child.try_wait() {
                 Ok(Some(status)) => break status,
                 Ok(None) => {
@@ -185,6 +314,22 @@ fn call_python(root: &Path, request: &str) -> Result<Value, String> {
                 }
             }
         };
+
+        if let Some((id, channel)) = stream {
+            // Flush the remaining events after Python exits.
+            while cursor < fs::metadata(&stderr_path)
+                .map_err(|e| e.to_string())?.len()
+            {
+                forward_progress(
+                    &stderr_path,
+                    &mut cursor,
+                    &mut pending,
+                    &mut last_sequence,
+                    id,
+                    channel,
+                )?;
+            }
+        }
 
         let stdout = read_limited(&stdout_path)?;
         let stderr = read_limited(&stderr_path)?;
@@ -355,6 +500,44 @@ pub async fn start_application_build_bridge(request: String) -> Result<Applicati
     .map_err(|e| format!("Application Builder task failed: {e}"))?
 }
 
+
+/// Stream persisted Python milestones to the invoking frontend.
+/// Rust independently verifies the final Builder result.
+#[tauri::command]
+pub async fn start_application_build_stream(
+    request: String,
+    session_id: String,
+    on_event: Channel<Value>,
+) -> Result<ApplicationBuildResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let trimmed = request.trim();
+
+        if trimmed.is_empty() || trimmed.len() > REQUEST_LIMIT {
+            return Err("Invalid application request length".into());
+        }
+
+        if session_id.is_empty() || session_id.len() > 128
+            || !session_id.bytes().all(|b| {
+                b.is_ascii_alphanumeric() || b == b'-'
+            })
+        {
+            return Err("Invalid Builder session ID".into());
+        }
+
+        let root = builder_root()?;
+
+        let output = call_python_stream(
+            &root,
+            trimmed,
+            Some((&session_id, &on_event)),
+        )?;
+
+        verified_result(&root, &output)
+    })
+    .await
+    .map_err(|e| format!("Builder worker failed: {e}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -508,4 +691,117 @@ mod tests {
         assert_eq!(result.phases[3].status, "pending");
         println!("TAURI_COMMAND_RAN_REAL_BUILDER project={}", result.project_path);
     }
+}
+
+
+// Read a generated HTML application from the managed workspace.
+// This is a source preview, not an Application Engineering approval.
+#[tauri::command]
+pub async fn read_application_preview(
+    project_path: Option<String>,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let managed = builder_root()?
+            .join("var/application-generation")
+            .canonicalize()
+            .map_err(|e| format!("Managed workspace unavailable: {e}"))?;
+
+        let workspace = match project_path {
+            Some(path) => {
+                let supplied = PathBuf::from(path);
+
+                if !supplied.is_absolute()
+                    || fs::symlink_metadata(&supplied)
+                        .map_err(|e| e.to_string())?
+                        .file_type()
+                        .is_symlink()
+                {
+                    return Err("Invalid preview workspace.".into());
+                }
+
+                supplied
+                    .canonicalize()
+                    .map_err(|e| format!("Preview workspace unavailable: {e}"))?
+            }
+            None => {
+                // On page load, discover the most recent actual HTML
+                // application already generated under the managed root.
+                let mut candidates = Vec::new();
+
+                for item in fs::read_dir(&managed)
+                    .map_err(|e| e.to_string())?
+                {
+                    let entry = item.map_err(|e| e.to_string())?;
+                    let path = entry.path();
+                    let meta = fs::symlink_metadata(&path)
+                        .map_err(|e| e.to_string())?;
+
+                    if !meta.is_dir() || meta.file_type().is_symlink() {
+                        continue;
+                    }
+
+                    let file = path.join("index.html");
+
+                    if let Ok(meta) = fs::symlink_metadata(&file) {
+                        if meta.is_file()
+                            && !meta.file_type().is_symlink()
+                            && meta.len() <= 524_288
+                        {
+                            let modified = meta.modified()
+                                .unwrap_or(std::time::UNIX_EPOCH);
+
+                            candidates.push((modified, path));
+                        }
+                    }
+                }
+
+                candidates.sort_by(|a, b| b.0.cmp(&a.0));
+
+                candidates
+                    .into_iter()
+                    .next()
+                    .map(|(_, path)| path)
+                    .ok_or("No generated HTML application available.")?
+            }
+        };
+
+        if workspace.parent() != Some(managed.as_path())
+            || !workspace.is_dir()
+        {
+            return Err("Preview is outside the managed workspace.".into());
+        }
+
+        let file = workspace.join("index.html");
+        let metadata = fs::symlink_metadata(&file)
+            .map_err(|_| "This application has no HTML preview entry point.".to_string())?;
+
+        if !metadata.is_file()
+            || metadata.file_type().is_symlink()
+            || metadata.len() > 524_288
+        {
+            return Err("Unsafe or oversized preview document.".into());
+        }
+
+        let resolved = file
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+
+        if resolved.parent() != Some(workspace.as_path()) {
+            return Err("Preview file escapes the workspace.".into());
+        }
+
+        let html = fs::read_to_string(&resolved)
+            .map_err(|e| format!("Cannot read generated HTML: {e}"))?;
+
+        Ok(serde_json::json!({
+            "html": html,
+            "project_name": workspace.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("Generated application"),
+            "preview_kind": "self_contained_html",
+            "engineering_verified": false
+        }))
+    })
+    .await
+    .map_err(|e| format!("Preview task failed: {e}"))?
 }

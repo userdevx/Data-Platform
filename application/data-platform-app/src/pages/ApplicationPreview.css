@@ -1,0 +1,282 @@
+.dw-builder-split-layout {
+  display: grid;
+  grid-template-columns:
+    minmax(320px, 44%)
+    minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: min(720px, calc(100vh - 120px));
+  align-items: stretch;
+}
+
+.dw-builder-split-layout > main {
+  min-width: 0;
+  max-width: 100%;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+}
+
+.dw-application-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 520px;
+  max-height: calc(100vh - 110px);
+  overflow: hidden;
+  border: 1px solid var(--border-color, #34383f);
+  border-radius: 14px;
+  background: var(--surface-color, #17191e);
+  color: var(--text-color, inherit);
+}
+
+.dw-application-preview__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color, #34383f);
+}
+
+.dw-application-preview__header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.dw-application-preview__header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.dw-application-preview__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.dw-application-preview button {
+  cursor: pointer;
+  border: 1px solid var(--border-color, #494f58);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+}
+
+.dw-application-preview button:hover,
+.dw-application-preview button.is-active {
+  background: rgba(127, 140, 160, 0.16);
+}
+
+.dw-application-preview button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.dw-application-preview__body {
+  display: flex;
+  flex: 1;
+  min-height: 280px;
+  overflow: hidden;
+  align-items: stretch;
+  justify-content: center;
+  background: #262a31;
+}
+
+.dw-application-preview__viewport {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: white;
+  transition: max-width 180ms ease;
+}
+
+.dw-application-preview__viewport.is-mobile {
+  max-width: 390px;
+  margin: auto;
+  box-shadow: 0 0 28px rgba(0, 0, 0, 0.25);
+}
+
+.dw-application-preview__viewport iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border: 0;
+  background: white;
+}
+
+.dw-application-preview__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 28px;
+  color: #d8dce4;
+}
+
+.dw-application-preview__empty h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.dw-application-preview__empty p {
+  margin: 0;
+  max-width: 300px;
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.75;
+}
+
+.dw-application-preview__empty-icon {
+  font-size: 30px;
+  opacity: 0.6;
+}
+
+.dw-application-preview__connection {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color, #34383f);
+}
+
+.dw-application-preview__connection label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.dw-application-preview__port-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dw-application-preview__port-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #494f58);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.dw-application-preview__port-row button {
+  padding-inline: 16px;
+}
+
+.dw-application-preview__connection p {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.dw-application-preview__footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color, #34383f);
+  font-size: 11px;
+  line-height: 1.5;
+  opacity: 0.65;
+}
+
+@media (max-width: 1050px) {
+  .dw-builder-split-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dw-builder-split-layout > main,
+  .dw-application-preview {
+    max-height: none;
+  }
+
+  .dw-application-preview {
+    min-height: 520px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dw-application-preview__viewport {
+    transition: none;
+  }
+}
+
+
+/* DATAWORC_PREVIEW_LIGHT_THEME_V1 */
+
+.dw-application-preview {
+  background: #ffffff;
+  color: #172441;
+  border: 1px solid #dce3ee;
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(29, 51, 89, 0.06);
+}
+
+.dw-application-preview__header {
+  background: #ffffff;
+  color: #172441;
+  border-bottom: 1px solid #e2e8f2;
+}
+
+.dw-application-preview__header h2 {
+  color: #101c35;
+  font-weight: 650;
+}
+
+.dw-application-preview__header p {
+  color: #66758f;
+  opacity: 1;
+}
+
+.dw-application-preview__body {
+  background: #f4f6fb;
+}
+
+.dw-application-preview__empty {
+  color: #344463;
+}
+
+.dw-application-preview__empty h3 {
+  color: #172441;
+}
+
+.dw-application-preview__empty p {
+  color: #63718a;
+  opacity: 1;
+}
+
+.dw-application-preview__controls button {
+  background: #ffffff;
+  color: #28436b;
+  border-color: #dbe3f0;
+}
+
+.dw-application-preview__controls button:hover {
+  background: #eef4ff;
+}
+
+.dw-application-preview__controls button.is-active {
+  color: #1855d7;
+  background: #eaf1ff;
+  border-color: #bbd0fb;
+}
+
+.dw-application-preview__footer {
+  background: #ffffff;
+  color: #64748b;
+  border-top: 1px solid #e2e8f2;
+  opacity: 1;
+}
+
+.dw-application-preview__connection {
+  background: #ffffff;
+  color: #172441;
+  border-top: 1px solid #e2e8f2;
+}

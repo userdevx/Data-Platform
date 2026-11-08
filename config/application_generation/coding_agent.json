@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "enabled": true,
+  "adapter_module": "engine.application_generation.aider_adapter",
+  "container_image": "docker.io/paulgauthier/aider:latest",
+  "endpoint": "http://127.0.0.1:11434",
+  "seconds": 300
+}

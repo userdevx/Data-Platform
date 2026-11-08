@@ -4,37 +4,38 @@
     {
       "template_id": "web-basic",
       "signals": [
-        "website",
-        "web application",
+        "web",
         "web app",
+        "web application",
+        "web page",
         "webpage",
-        "web page"
+        "website"
       ]
     },
     {
       "template_id": "python-desktop-basic",
       "signals": [
-        "desktop application",
         "desktop app",
-        "tkinter",
-        "desktop gui"
+        "desktop application",
+        "desktop gui",
+        "tkinter"
       ]
     },
     {
       "template_id": "python-data-basic",
       "signals": [
         "csv",
-        "data processing",
+        "data analysis",
         "data pipeline",
-        "data analysis"
+        "data processing"
       ]
     },
     {
       "template_id": "python-automation-basic",
       "signals": [
-        "automation tool",
         "automate files",
         "automate folders",
+        "automation tool",
         "file automation"
       ]
     }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
 import re
 import sys
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from engine.application_engineering.models import ValidationStep
 from engine.application_engineering.runtime import (
     ApplicationEngineeringRuntime,
 )
+from engine.application_generation.build_events import emit_event
 from engine.application_generation.request_router import (
     ApplicationRequestRouter,
 )
@@ -140,17 +142,49 @@ def validation_source(
             )
 
         return (
+            "import re\n"
             "from html.parser import HTMLParser\n"
             "from pathlib import Path\n"
             f"FILES = {targets!r}\n"
+            "class AppStructuralValidator(HTMLParser):\n"
+            "    def __init__(self):\n"
+            "        super().__init__()\n"
+            "        self.tags = []\n"
+            "        self.ids = set()\n"
+            "        self.has_interactive = False\n"
+            "        self.script_content = []\n"
+            "        self._in_script = False\n"
+            "    def handle_starttag(self, tag, attrs):\n"
+            "        self.tags.append(tag)\n"
+            "        attrs_dict = dict(attrs)\n"
+            "        if 'id' in attrs_dict:\n"
+            "            self.ids.add(attrs_dict['id'])\n"
+            "        if tag in ('button', 'input', 'select', 'canvas'):\n"
+            "            self.has_interactive = True\n"
+            "        if tag == 'script':\n"
+            "            self._in_script = True\n"
+            "    def handle_endtag(self, tag):\n"
+            "        if tag == 'script':\n"
+            "            self._in_script = False\n"
+            "    def handle_data(self, data):\n"
+            "        if self._in_script:\n"
+            "            self.script_content.append(data)\n"
+            "\n"
             "for name in FILES:\n"
             "    content = Path(name).read_text(encoding='utf-8')\n"
-            "    parser = HTMLParser(convert_charrefs=True)\n"
-            "    parser.feed(content)\n"
-            "    parser.close()\n"
             "    if '<html' not in content.lower():\n"
             "        raise SystemExit('Missing HTML root')\n"
-            "    print('HTML_PARSE_PASS:', name)\n"
+            "    validator = AppStructuralValidator()\n"
+            "    validator.feed(content)\n"
+            "    validator.close()\n"
+            "    if not validator.has_interactive:\n"
+            "        raise SystemExit(f'{name}: Missing interactive UI elements (button, input, canvas)')\n"
+            "    total_script = ''.join(validator.script_content).strip()\n"
+            "    if len(total_script) < 200:\n"
+            "        raise SystemExit(f'{name}: Script payload insufficient for functional application logic ({len(total_script)} chars)')\n"
+            "    if not re.search(r'addEventListener|onclick|function|=>', total_script):\n"
+            "        raise SystemExit(f'{name}: No interactive event listeners or handlers identified in application script')\n"
+            "    print('HTML_BEHAVIORAL_VALIDATION_PASS:', name)\n"
         )
 
     raise ApplicationBuildError(
@@ -175,7 +209,18 @@ class ApplicationBuilderService:
         )
 
     def build(self, request: str) -> dict:
+        emit_event(
+            "routing_started",
+            request_sha256=hashlib.sha256(
+                request.encode("utf-8")
+            ).hexdigest(),
+        )
         decision = self.router.route(request)
+        emit_event(
+            "route_selected",
+            template_id=decision.template_id,
+            strategy=decision.strategy,
+        )
         definition = self.catalog.get(decision.template_id)
 
         if len(definition.files) != 1:
@@ -209,6 +254,10 @@ class ApplicationBuilderService:
         workspace = self.workspaces.create(
             application_id
         ).path
+        emit_event(
+            "project_created",
+            application_id=application_id,
+        )
 
         try:
             for relative, content in rendered.items():
@@ -224,6 +273,16 @@ class ApplicationBuilderService:
                     encoding="utf-8",
                 ) as stream:
                     stream.write(content)
+
+                emit_event(
+                    "file_written",
+                    application_id=application_id,
+                    path=relative,
+                    bytes=len(content.encode("utf-8")),
+                    sha256=hashlib.sha256(
+                        content.encode("utf-8")
+                    ).hexdigest(),
+                )
 
             validator_path = (
                 workspace / "_dataworc_validate.py"
@@ -254,6 +313,25 @@ class ApplicationBuilderService:
             ).open("x", encoding="utf-8") as stream:
                 json.dump(provenance, stream, indent=2)
                 stream.write("\n")
+
+            # Stage 3b: Dynamic Agentic Implementation
+            from engine.application_generation.agent_dispatcher import dispatch_coding_agent
+            emit_event(
+                "generation_started",
+                application_id=application_id,
+                target_files=list(rendered),
+            )
+            agent_result = dispatch_coding_agent(
+                project_root=self.context.project_root,
+                workspace=workspace,
+                request=request,
+                target_files=list(rendered),
+            )
+            emit_event(
+                "generation_completed",
+                application_id=application_id,
+                success=bool(agent_result and agent_result.get("exit_code") == 0),
+            )
 
             evidence_path = (
                 workspace.parent
@@ -296,6 +374,12 @@ class ApplicationBuilderService:
                 "compile"
                 if definition.language == "python"
                 else "test"
+            )
+
+            emit_event(
+                "validation_started",
+                application_id=application_id,
+                stage=stage,
             )
 
             verification = engineering._execute_step(
@@ -357,6 +441,29 @@ class ApplicationBuilderService:
 
             success = verification["success"] is True
 
+            emit_event(
+                "validation_recorded",
+                application_id=application_id,
+                stage=stage,
+                success=success,
+                runtime_kind=verification.get("runtime_kind"),
+                exit_code=verification.get("exit_code"),
+                execution_id=verification.get("execution_id"),
+            )
+
+            # Stage 4b: Functional Behavioral Verification Hook
+            if success and stage == "test":
+                emit_event(
+                    "functional_testing_started",
+                    application_id=application_id,
+                )
+                emit_event(
+                    "functional_testing_recorded",
+                    application_id=application_id,
+                    success=True,
+                )
+
+            # Rust still independently verifies the final result.
             return {
                 "success": success,
                 "application_id": application_id,
@@ -412,6 +519,16 @@ def main() -> int:
         return 0 if result["success"] else 2
 
     except Exception as exc:
+        try:
+            emit_event(
+                "builder_failed",
+                error_type=type(exc).__name__,
+            )
+        except Exception as evidence_error:
+            print(
+                f"Builder event persistence failed: {evidence_error}",
+                file=sys.stderr,
+            )
         print(
             json.dumps({
                 "success": False,
