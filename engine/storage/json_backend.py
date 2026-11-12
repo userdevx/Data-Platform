@@ -100,6 +100,93 @@ class LocalJsonStorageBackend(
                         fcntl.LOCK_UN,
                     )
 
+
+    def transact_records(self, operation):
+        """
+        Append validated canonical records in one atomic
+        cross-process transaction.
+
+        Existing records are immutable through this API.
+
+        The callback must be trusted and free of external
+        side effects. A raised exception prevents persistence.
+        """
+        from copy import deepcopy
+        from engine.validation import validate_record
+
+        if not callable(operation):
+            raise TypeError("operation must be callable")
+
+        with self._exclusive_lock():
+            original = self._load_records_unlocked()
+
+            if not isinstance(original, list):
+                raise ValueError(
+                    "Data Engine records must be a list"
+                )
+
+            working = deepcopy(original)
+            result = operation(working)
+
+            if not isinstance(working, list):
+                raise TypeError(
+                    "Transaction records must remain a list"
+                )
+
+            original_count = len(original)
+
+            if (
+                len(working) < original_count
+                or working[:original_count] != original
+            ):
+                raise ValueError(
+                    "Existing transaction records are immutable"
+                )
+
+            seen_ids = set()
+
+            for existing in original:
+                if not isinstance(existing, dict):
+                    raise ValueError(
+                        "Existing storage contains invalid records"
+                    )
+
+                record_id = existing.get("id")
+
+                if type(record_id) is int:
+                    if record_id in seen_ids:
+                        raise ValueError(
+                            "Duplicate existing record ID"
+                        )
+
+                    seen_ids.add(record_id)
+
+            for record in working[original_count:]:
+                if not isinstance(record, dict):
+                    raise TypeError(
+                        "New transaction record must be a mapping"
+                    )
+
+                record_id = record.get("id")
+
+                if type(record_id) is not int:
+                    raise ValueError(
+                        "New record requires an integer ID"
+                    )
+
+                if record_id in seen_ids:
+                    raise ValueError(
+                        "Duplicate Data Engine record ID"
+                    )
+
+                validate_record(record)
+                seen_ids.add(record_id)
+
+            if len(working) > original_count:
+                self._save_records_unlocked(working)
+
+            return deepcopy(result)
+
     def initialize_storage(
         self,
     ):

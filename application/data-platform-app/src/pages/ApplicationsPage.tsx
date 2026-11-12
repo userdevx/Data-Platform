@@ -331,9 +331,9 @@ export default function ApplicationsPage() {
               type="button"
               className="dw-build-open-button"
               onClick={() => {
-                void openPath(
-                  result.project_path,
-                );
+                void openPath(result.project_path).catch((err) => {
+                  console.error('Could not open folder:', err);
+                });
               }}
             >
               Open folder

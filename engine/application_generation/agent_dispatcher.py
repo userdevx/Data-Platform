@@ -120,6 +120,7 @@ def dispatch_coding_agent(
             try:
                 result_data = json.loads(result_path.read_text(encoding="utf-8"))
                 result_data["exit_code"] = 0
+                result_data["audit_dir"] = str(audit_dir)
                 return result_data
             except Exception:
                 pass

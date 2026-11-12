@@ -327,11 +327,23 @@ class ApplicationBuilderService:
                 request=request,
                 target_files=list(rendered),
             )
+            agent_ok = bool(
+                isinstance(agent_result, dict)
+                and agent_result.get("agent_execution_success") is True
+            )
             emit_event(
                 "generation_completed",
                 application_id=application_id,
-                success=bool(agent_result and agent_result.get("exit_code") == 0),
+                success=agent_ok,
             )
+            if agent_result is not None and not agent_ok:
+                reason = (
+                    agent_result.get("error")
+                    or f"exit_code={agent_result.get('exit_code')}, timed_out={agent_result.get('timed_out')}, config_integrity={agent_result.get('config_integrity')}"
+                )
+                raise ApplicationBuildError(
+                    f"Coding agent failed to generate functional implementation: {reason}"
+                )
 
             evidence_path = (
                 workspace.parent
@@ -391,6 +403,46 @@ class ApplicationBuilderService:
                 )
             )
 
+            functional_verification = None
+            if verification["success"] is True and definition.language == "html":
+                from engine.application_generation.functional_verifier import (
+                    verify_web_application_behavior,
+                )
+
+                emit_event(
+                    "functional_testing_started",
+                    application_id=application_id,
+                    entry_file=sorted(rendered)[0],
+                )
+                functional_verification = verify_web_application_behavior(
+                    workspace=workspace,
+                    entry_file=sorted(rendered)[0],
+                )
+                functional_payload = {
+                    "application_id": application_id,
+                    **functional_verification,
+                }
+                writer.write(
+                    source="application_engineering",
+                    category="application_engineering",
+                    data_type="functional_test_result",
+                    value=functional_payload,
+                    unit="record",
+                )
+                emit_event(
+                    "functional_testing_completed",
+                    application_id=application_id,
+                    success=bool(functional_verification.get("success")),
+                    execution_id=functional_verification.get("execution_id"),
+                    controls_exercised=functional_verification.get("controls_exercised", 0),
+                    dom_mutated=bool(functional_verification.get("dom_mutated")),
+                )
+                if functional_verification.get("success") is not True:
+                    raise ApplicationBuildError(
+                        "Functional behavioral verification failed: "
+                        f"{functional_verification.get('error') or 'Unknown browser error'}"
+                    )
+
             # Independent readback of the validation evidence, from a freshly opened backend.
             # No successful response is permitted on missing or inconsistent evidence.
             from engine.query import QueryService as EvidenceQueryService
@@ -402,12 +454,16 @@ class ApplicationBuilderService:
             expected_stage = (
                 "compile_result" if stage == "compile" else "test_result"
             )
-            if len(persisted) != 2:
+            expected_types = {"generation_result", expected_stage}
+            if functional_verification is not None:
+                expected_types.add("functional_test_result")
+
+            if len(persisted) != len(expected_types):
                 raise ApplicationBuildError(
                     "Expected generation and validation evidence records."
                 )
             by_type = {record.get("data_type"): record for record in persisted}
-            if set(by_type) != {"generation_result", expected_stage}:
+            if set(by_type) != expected_types:
                 raise ApplicationBuildError("Unexpected evidence record types.")
             for record in persisted:
                 if (
@@ -439,7 +495,25 @@ class ApplicationBuilderService:
                     "Persisted evidence disagrees with Builder output."
                 )
 
-            success = verification["success"] is True
+            if functional_verification is not None:
+                func_record = by_type["functional_test_result"]
+                if (
+                    func_record["source"] != "application_engineering"
+                    or func_record["value"].get("execution_id")
+                        != functional_verification["execution_id"]
+                    or func_record["value"].get("success")
+                        != functional_verification["success"]
+                    or func_record["value"].get("dom_mutated")
+                        != functional_verification["dom_mutated"]
+                ):
+                    raise ApplicationBuildError(
+                        "Persisted functional evidence disagrees with Builder output."
+                    )
+
+            success = verification["success"] is True and (
+                functional_verification is None
+                or functional_verification.get("success") is True
+            )
 
             emit_event(
                 "validation_recorded",
@@ -451,20 +525,8 @@ class ApplicationBuilderService:
                 execution_id=verification.get("execution_id"),
             )
 
-            # Stage 4b: Functional Behavioral Verification Hook
-            if success and stage == "test":
-                emit_event(
-                    "functional_testing_started",
-                    application_id=application_id,
-                )
-                emit_event(
-                    "functional_testing_recorded",
-                    application_id=application_id,
-                    success=True,
-                )
-
             # Rust still independently verifies the final result.
-            return {
+            result_payload = {
                 "success": success,
                 "application_id": application_id,
                 "project_name": name,
@@ -473,15 +535,21 @@ class ApplicationBuilderService:
                 "template_id": definition.template_id,
                 "files": sorted(rendered),
                 "message": (
-                    "Generated source passed the available "
-                    "sandbox validation."
-                    if success else
-                    "Generated source failed sandbox validation."
+                    "Generated source passed sandbox validation and headless browser functional testing."
+                    if success and functional_verification is not None
+                    else (
+                        "Generated source passed the available sandbox validation."
+                        if success
+                        else "Generated source failed sandbox validation."
+                    )
                 ),
                 "verification": verification,
                 "evidence_path": str(evidence_path),
                 "evidence_verified": True,
             }
+            if functional_verification is not None:
+                result_payload["functional_verification"] = functional_verification
+            return result_payload
 
         except Exception:
             # Preserve the workspace and any evidence for diagnosis.

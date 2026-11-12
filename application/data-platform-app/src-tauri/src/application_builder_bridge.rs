@@ -464,23 +464,64 @@ fn verified_result(root: &Path, output: &Value) -> Result<ApplicationBuildResult
         .unwrap_or("")
         .to_owned();
 
+    let (functional_phase, summary_message, test_output) =
+        if let Some(func_ver) = output.get("functional_verification") {
+            let func_exec_id = required(func_ver, "execution_id")?;
+            if func_ver.get("success").and_then(Value::as_bool) != Some(true)
+                || func_ver.get("dom_mutated").and_then(Value::as_bool) != Some(true)
+            {
+                return Err("Headless browser functional verification did not pass.".into());
+            }
+            let exercised = func_ver
+                .get("controls_exercised")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let discovered = func_ver
+                .get("controls_discovered")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            (
+                phase(
+                    "functional-testing",
+                    "Functional testing",
+                    "success",
+                    &format!(
+                        "Verified in headless Chromium ({exercised}/{discovered} controls exercised, DOM mutated, 0 JS errors)."
+                    ),
+                ),
+                "Project files generated, gVisor source validation passed, and headless Chromium functional testing verified.".to_owned(),
+                format!("functional_test_execution_id={func_exec_id} controls_exercised={exercised} dom_mutated=true"),
+            )
+        } else {
+            (
+                phase(
+                    "functional-testing",
+                    "Functional testing",
+                    "pending",
+                    "Application behavior has not yet been verified.",
+                ),
+                "Project files generated and source validation passed in gVisor. Functional testing remains pending.".to_owned(),
+                String::new(),
+            )
+        };
+
     Ok(ApplicationBuildResult {
         success: true,
         project_name: required(output, "project_name")?.to_owned(),
         project_path: workspace.to_string_lossy().into_owned(),
         application_type: required(output, "application_type")?.to_owned(),
         files,
-        message: "Project files generated and source validation passed in gVisor. Functional testing remains pending.".into(),
+        message: summary_message,
         phases: vec![
             phase("planning", "Planning", "success", &format!("Selected registered template: {template_id}")),
             phase("generation", "Generation", "success", "Generated files and project metadata verified."),
             phase("source-validation", "Source validation", "success", "Source validation passed in gVisor; validation evidence was recorded and read back."),
-            phase("functional-testing", "Functional testing", "pending", "Application behavior has not yet been verified."),
+            functional_phase,
             phase("security", "Security", "pending", "Dedicated security scanning has not yet been verified."),
             phase("preview", "Preview", "pending", "Application preview has not yet been verified."),
         ],
         build_output: validation_output,
-        test_output: String::new(),
+        test_output,
         preview_path: None,
     })
 }

@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import signal
 import sys
 import tempfile
 import time
@@ -167,25 +168,94 @@ def main() -> int:
                        "\nOnly edit the provided files. Do not request shell commands.\n",
                        encoding="utf-8")
     started = time.monotonic()
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def handle_sigterm(signum, _frame):
+        raise InterruptedError(
+            f"Aider execution received signal {signum}"
+        )
+
+    def remove_execution_container(log):
+        # This name belongs only to the current adapter invocation.
+        # Never target the persistent Aider service container.
+        subprocess.run(
+            ["podman", "rm", "--force", container_name],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            timeout=25,
+            check=False,
+        )
+
+        probe = subprocess.run(
+            ["podman", "container", "exists", container_name],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+
+        if probe.returncode == 0:
+            raise RuntimeError(
+                "Temporary execution container survived cleanup"
+            )
+
+        if probe.returncode != 1:
+            raise RuntimeError(
+                "Could not verify temporary container removal"
+            )
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
     try:
-        with (args.audit / "aider.log").open("w", encoding="utf-8") as log:
+        with (args.audit / "aider.log").open(
+            "w", encoding="utf-8"
+        ) as log:
             try:
-                completed = subprocess.run(command, stdin=subprocess.DEVNULL,
-                                           stdout=log, stderr=subprocess.STDOUT,
-                                           timeout=args.seconds, check=False)
+                completed = subprocess.run(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    timeout=args.seconds,
+                    check=False,
+                )
                 rc = completed.returncode
                 timed_out = False
+
             except subprocess.TimeoutExpired:
                 rc = 124
                 timed_out = True
-                subprocess.run(["podman", "rm", "--force", container_name],
-                               stdin=subprocess.DEVNULL, stdout=log,
-                               stderr=subprocess.STDOUT, timeout=25, check=False)
+                signal.signal(
+                    signal.SIGTERM,
+                    previous_sigterm,
+                )
+                remove_execution_container(log)
+
+            except BaseException:
+                signal.signal(
+                    signal.SIGTERM,
+                    previous_sigterm,
+                )
+                remove_execution_container(log)
+                raise
+
     finally:
-        config_valid = (not config.is_symlink() and config.is_file()
-                        and config.read_text(encoding="utf-8") == "{}\n")
+        signal.signal(
+            signal.SIGTERM,
+            previous_sigterm,
+        )
+
+        config_valid = (
+            not config.is_symlink()
+            and config.is_file()
+            and config.read_text(encoding="utf-8") == "{}\\n"
+        )
+
         request.unlink(missing_ok=True)
         config.unlink(missing_ok=True)
+
     after = inventory(workspace)
     changes, unexpected = classify_changes(before, after, files)
     edited_targets = [name for name in files if name in changes and

@@ -2,10 +2,23 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default permissions for the Data Platform application",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
+    "dialog:default",
     "opener:default",
-    "dialog:default"
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "$HOME/Data-Platform/var/application-generation/**"
+        },
+        {
+          "path": "$HOME/Data-Platform/var/application-generation"
+        }
+      ]
+    }
   ]
 }
